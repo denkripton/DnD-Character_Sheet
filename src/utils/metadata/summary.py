@@ -1,0 +1,1 @@
+summary = "A comprehensive API for managing D&D character sheets"

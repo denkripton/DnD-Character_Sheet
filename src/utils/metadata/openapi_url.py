@@ -1,0 +1,1 @@
+openapi_url = "/api/v2/openapi.json"
