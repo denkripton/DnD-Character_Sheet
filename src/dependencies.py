@@ -5,7 +5,7 @@ from fastapi import Depends, HTTPException
 
 from src.exceptions import ServiceError
 from src.config import logger
-from src.databases import AsyncSessionLocal
+from src.databases.sql import AsyncSessionLocal
 
 
 async def get_session() -> AsyncSession:
