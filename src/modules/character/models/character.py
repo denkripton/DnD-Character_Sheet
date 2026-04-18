@@ -7,7 +7,7 @@ from src.databases.sql import Base
 
 
 class Character(Base):
-    __tablename__ = "charactes"
+    __tablename__ = "characters"
 
 
     id: Mapped[uuid.UUID] = mapped_column(

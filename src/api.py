@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from src.modules.auth import user_router
+from src.modules.character.router import character_router
 from src.utils.interfaces.application import Application
 from src.utils.metadata import (
     contact,
@@ -21,7 +22,7 @@ class API(Application):
         self.openapi_url = openapi_url
         self.tags_metadata = tags_metadata
         self.contact = contact
-        self.routers = [user_router]
+        self.routers = [user_router, character_router]
 
     def create(self):
         self.app = FastAPI(
