@@ -3,8 +3,7 @@ from src.exceptions import ServiceError
 from src.modules.character.repositories.character import CharacterRepository
 from src.modules.auth.repository import UserRepository
 
-from src.modules.character.schemas.character.creation import CharacterCreateSchema
-
+from src.modules.character.schemas import CharacterCreateSchema
 
 class CharacterService:
     def __init__(self, character_repository: CharacterRepository, user_repository: UserRepository):
