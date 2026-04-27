@@ -1,7 +1,7 @@
-from src.modules.character.schemas.stats.create import CreateStatsSchema
-from src.modules.character.schemas.stats.read import ReadStatsSchema
+from src.modules.character.schemas.stats.create import StatsCreateSchema
+from src.modules.character.schemas.stats.read import StatsReadSchema
 
 __all__ = [
-    "CreateStatsSchema",
-    "ReadStatsSchema"
+    "StatsCreateSchema",
+    "StatsReadSchema"
 ]

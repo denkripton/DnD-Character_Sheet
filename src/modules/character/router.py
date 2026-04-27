@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from src.dependencies import get_error
 from src.modules.auth import get_current_user
 
-from src.modules.character.schemas import CharacterCreateSchema, CharacterRead
+from src.modules.character.schemas import CharacterCreateSchema, CharacterReadSchema
 from src.modules.character.dependencies import get_character_service
 from src.modules.character.service import CharacterService
 
@@ -19,7 +19,7 @@ character_router = APIRouter(prefix="/chatacters")
     summary="Character creation (Protected)",
     tags=["Character CRUD's"],
     description="Create your character",
-    response_model=CharacterRead,
+    response_model=CharacterReadSchema,
     responses={
         401: {"model": User401},
         422: {"model": User422},

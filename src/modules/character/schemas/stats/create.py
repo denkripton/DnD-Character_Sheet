@@ -3,7 +3,7 @@ from pydantic import Field
 from src.utils.schemas.base_schema import BaseSchema
 
 
-class CreateStatsSchema(BaseSchema):
+class StatsCreateSchema(BaseSchema):
     strength: int = Field(ge=8, le=17, default=8)
     dexterity: int = Field(ge=8, le=17, default=8)
     constitution: int = Field(ge=8, le=17, default=8)
