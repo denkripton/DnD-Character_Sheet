@@ -32,3 +32,19 @@ async def create_character(
     service: CharacterService = Depends(get_character_service)
 ):
     return await get_error(service.character_creation, user_id=user_id, data=data)
+
+
+@character_router.get(
+    "my/",
+    summary="Get all your characters (Protected)",
+    tags=["Character CRUD's"],
+    description="Get all your characters",
+    responses={
+        401: {"model": User401},
+    },
+)
+async def get_my_charaters(
+    user_id: str = Depends(get_current_user),
+    service: CharacterService = Depends(get_character_service)
+):
+    return await get_error(service.get_all_charaters, user_id=user_id)

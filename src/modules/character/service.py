@@ -29,3 +29,7 @@ class CharacterService:
         char_dict["creator"] = {"name": existing_user.username}
 
         return char_dict
+
+    async def get_all_charaters(self, user_id):
+        characters = await self.character_repo.get_many(owner_id=user_id)
+        return characters
