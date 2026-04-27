@@ -28,6 +28,8 @@ class Character(Base):
         nullable=False,
     )
 
+    stats: Mapped["Stat"] = relationship(back_populates="character", uselist=False)
+
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
 
     owner: Mapped["User"] = relationship(back_populates="character")
