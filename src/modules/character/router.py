@@ -1,3 +1,5 @@
+from typing import List
+
 from fastapi import APIRouter, Depends
 
 from src.dependencies import get_error
@@ -38,6 +40,7 @@ async def create_character(
     summary="Get all your characters (Protected)",
     tags=["Character CRUD's"],
     description="Get all your characters",
+    response_model=List[CharacterCreateSchema],
     responses={
         401: {"model": User401},
     },

@@ -31,4 +31,9 @@ class CharacterService:
 
     async def get_all_charaters(self, user_id):
         characters = await self.character_repo.get_many(owner_id=user_id)
-        return characters
+
+        return_list = []
+        for char in characters:
+            char_dict = CharacterCreateSchema.model_validate(char).model_dump()
+            return_list.append(char_dict)
+        return return_list
