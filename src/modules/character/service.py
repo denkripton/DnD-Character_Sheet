@@ -1,12 +1,13 @@
 from src.exceptions import ServiceError
-
-from src.modules.character.repositories.character import CharacterRepository
 from src.modules.auth.repository import UserRepository
-
+from src.modules.character.repositories.character import CharacterRepository
 from src.modules.character.schemas import CharacterCreateSchema
 
+
 class CharacterService:
-    def __init__(self, character_repository: CharacterRepository, user_repository: UserRepository):
+    def __init__(
+        self, character_repository: CharacterRepository, user_repository: UserRepository
+    ):
         self.character_repo = character_repository
         self.user_repo = user_repository
 
@@ -17,7 +18,7 @@ class CharacterService:
 
         if existing_user is None:
             raise ServiceError(code=422, msg="User does not exist")
-        
+
         data["owner_id"] = user_id
 
         character = await self.character_repo.create(**data)
@@ -37,3 +38,14 @@ class CharacterService:
             char_dict = CharacterCreateSchema.model_validate(char).model_dump()
             return_list.append(char_dict)
         return return_list
+
+    async def get_character_by_id(self, character_id):
+
+        character = await self.character_repo.get_by_id(character_id)
+
+        if character is None:
+            raise ServiceError(code=422, msg="Character does not exist")
+
+        char_dict = CharacterCreateSchema.model_validate(character).model_dump()
+
+        return char_dict

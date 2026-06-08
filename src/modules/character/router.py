@@ -36,7 +36,7 @@ async def create_character(
 
 
 @character_router.get(
-    "my/",
+    "/my",
     summary="Get all your characters (Protected)",
     tags=["Character CRUD's"],
     description="Get all your characters",
@@ -50,3 +50,20 @@ async def get_my_charaters(
     service: CharacterService = Depends(get_character_service)
 ):
     return await get_error(service.get_all_charaters, user_id=user_id)
+
+
+@character_router.get(
+    "/{character_id}",
+    summary="Get character by ID (Protected)",
+    tags=["Character CRUD's"],
+    description="Get a specific character by ID",
+    response_model=List[CharacterCreateSchema],
+    responses={
+        422: {"model": User422},
+    },
+)
+async def character_by_id(
+    character_id: str,
+    service: CharacterService = Depends(get_character_service)
+):
+    return await get_error(service.get_character_by_id, character_id=character_id)
