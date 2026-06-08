@@ -26,6 +26,7 @@ class CharacterService:
         await self.character_repo.session.refresh(character)
 
         char_dict = CharacterCreateSchema.model_validate(character).model_dump()
+        char_dict["id"] = character.id
         char_dict["creator"] = {"name": existing_user.username}
 
         return char_dict
