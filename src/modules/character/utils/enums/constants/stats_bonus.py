@@ -1,4 +1,4 @@
-stats_points = {
+stats_bonus = {
     8: -1,
     9: -1,
     10: 0,
