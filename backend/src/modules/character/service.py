@@ -27,16 +27,16 @@ class CharacterService:
 
         char_dict = CharacterCreateSchema.model_validate(character).model_dump()
         char_dict["id"] = character.id
-        char_dict["creator"] = {"name": existing_user.username}
 
         return char_dict
 
-    async def get_all_charaters(self, user_id):
+    async def get_all_characters(self, user_id):
         characters = await self.character_repo.get_many(owner_id=user_id)
 
         return_list = []
         for char in characters:
             char_dict = CharacterCreateSchema.model_validate(char).model_dump()
+            char_dict["id"] = char.id
             return_list.append(char_dict)
         return return_list
 
