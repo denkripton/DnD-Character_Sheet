@@ -1,19 +1,19 @@
 from fastapi import APIRouter, Depends, Response
 
-from src.dependencies import get_error
 from src.modules.auth import get_user_service
+
 from src.modules.auth.service import UserService
+from src.utils import ErrorHandlingRoute
 
-from src.modules.auth.schemas.user.read import UserRead
-from src.modules.auth.schemas.user.creation import UserCreateSchema
-from src.modules.auth.schemas.user.login import UserLoginSchema
 from src.modules.auth.schemas.auth.read import AuthReadSchema
-
 from src.modules.auth.schemas.exceptions.password_403 import Password403
 from src.modules.auth.schemas.exceptions.user_422 import User422
+from src.modules.auth.schemas.user.creation import UserCreateSchema
+from src.modules.auth.schemas.user.login import UserLoginSchema
+from src.modules.auth.schemas.user.read import UserRead
 
 
-user_router = APIRouter(prefix="/users")
+user_router = APIRouter(prefix="/users", route_class=ErrorHandlingRoute)
 
 
 @user_router.post(
@@ -30,7 +30,7 @@ async def register_user(
     data: UserCreateSchema,
     service: UserService = Depends(get_user_service),
 ):
-    return await get_error(service.register, data=data)
+    return await service.register(data=data)
 
 
 @user_router.post(
@@ -49,7 +49,7 @@ async def login_user(
     response: Response,
     service: UserService = Depends(get_user_service),
 ):
-    user = await get_error(service.login, data=data)
+    user = await service.login(data=data)
 
     response.set_cookie(
         key="refresh_token",

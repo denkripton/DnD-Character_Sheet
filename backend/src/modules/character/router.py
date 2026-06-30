@@ -2,8 +2,9 @@ from typing import List
 
 from fastapi import APIRouter, Depends
 
-from src.dependencies import get_error
 from src.modules.auth import get_current_user
+
+from src.utils import ErrorHandlingRoute
 
 from src.modules.character.schemas import CharacterCreateSchema, CharacterReadSchema
 from src.modules.character.dependencies import get_character_service
@@ -13,7 +14,7 @@ from src.modules.auth.schemas.exceptions.user_401 import User401
 from src.modules.auth.schemas.exceptions.user_422 import User422
 
 
-character_router = APIRouter(prefix="/chatacters")
+character_router = APIRouter(prefix="/chatacters", route_class=ErrorHandlingRoute)
 
 
 @character_router.post(
@@ -32,7 +33,7 @@ async def create_character(
     user_id: str = Depends(get_current_user),
     service: CharacterService = Depends(get_character_service)
 ):
-    return await get_error(service.character_creation, user_id=user_id, data=data)
+    return await service.character_creation(user_id=user_id, data=data)
 
 
 @character_router.get(
@@ -40,16 +41,16 @@ async def create_character(
     summary="Get all your characters (Protected)",
     tags=["Character CRUD's"],
     description="Get all your characters",
-    response_model=List[CharacterCreateSchema],
+    response_model=List[CharacterReadSchema],
     responses={
         401: {"model": User401},
     },
 )
-async def get_my_charaters(
+async def get_my_characters(
     user_id: str = Depends(get_current_user),
     service: CharacterService = Depends(get_character_service)
 ):
-    return await get_error(service.get_all_charaters, user_id=user_id)
+    return await service.get_all_characters(user_id=user_id)
 
 
 @character_router.get(
@@ -57,7 +58,7 @@ async def get_my_charaters(
     summary="Get character by ID (Protected)",
     tags=["Character CRUD's"],
     description="Get a specific character by ID",
-    response_model=List[CharacterCreateSchema],
+    response_model=CharacterReadSchema,
     responses={
         422: {"model": User422},
     },
@@ -66,4 +67,4 @@ async def character_by_id(
     character_id: str,
     service: CharacterService = Depends(get_character_service)
 ):
-    return await get_error(service.get_character_by_id, character_id=character_id)
+    return await service.get_character_by_id(character_id=character_id)
