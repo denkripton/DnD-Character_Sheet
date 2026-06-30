@@ -1,9 +1,6 @@
-from typing import Callable
-
+from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import Depends, HTTPException
 
-from src.exceptions import ServiceError
 from src.databases.sql import AsyncSessionLocal
 
 
@@ -13,15 +10,6 @@ async def get_session() -> AsyncSession:
             yield session
         finally:
             await session.close()
-
-
-async def get_error(method: Callable, *args, **kwargs):
-    try:
-        return await method(*args, **kwargs)
-    except ServiceError as service_e:
-        raise HTTPException(status_code=service_e.status_code, detail=service_e.message)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 class RepoFactory:

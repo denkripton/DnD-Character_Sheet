@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from src.modules.auth import user_router
 from src.modules.character.router import character_router
 from src.utils.interfaces.application import Application
+from src.utils import register_exception_handlers
 from src.utils.metadata import (
     contact,
     openapi_url,
@@ -35,7 +36,7 @@ class API(Application):
         )
         for router in self.routers:
             self.app.include_router(router=router)
-
+        register_exception_handlers(app=self.app)
 
 api = API()
 api.create()
