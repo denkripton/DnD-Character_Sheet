@@ -5,10 +5,6 @@ logging.basicConfig(level=logging.INFO)
 
 
 class Settings(BaseSettings):
-    DB_NAME: str
-    DB_USER: str
-    DB_PASSWORD: str
-
     DB_URL: str
 
     JWT_SECRET_KEY: str
