@@ -1,32 +1,42 @@
 from typing import Optional
 
-from fastapi import Depends, Request, Response, HTTPException
-
-from src.modules.auth.service import UserService
-from src.modules.auth.repository import UserRepository
+from fastapi import Depends, HTTPException, Request, Response
 from src.dependencies import RepoFactory
+from src.modules.auth.repository import UserRepository
+from src.modules.auth.service import UserService
 from src.modules.auth.utils import JWT
-
 
 user_repository = RepoFactory(repo=UserRepository)
 
-def get_jwt() -> JWT:
+
+def get_jwt_service() -> JWT:
     return JWT()
 
 
 class UserServiceFactory:
-    def __call__(
-        self, 
-        repo: UserRepository = Depends(user_repository),
-        jwt: JWT = Depends(get_jwt)
-        ):
-        return UserService(user_repository=repo, jwt=jwt)
+    def __init__(self, service_cls: type[UserService] = UserService):
+        self.service_cls = service_cls
 
-get_user_service = UserServiceFactory()
+    def create(
+        self,
+        user_repo: UserRepository,
+        jwt: JWT,
+    ) -> UserService:
+        return self.service_cls(user_repository=user_repo, jwt=jwt)
+
+
+user_service_factory = UserServiceFactory()
+
+
+def get_user_service(
+    user_repo: UserRepository = Depends(user_repository),
+    jwt: JWT = Depends(get_jwt_service),
+) -> UserService:
+    return user_service_factory.create(user_repo=user_repo, jwt=jwt)
 
 
 async def get_current_user(
-    request: Request, response: Response, jwt: JWT = Depends(get_jwt)
+    request: Request, response: Response, jwt: JWT = Depends(get_jwt_service)
 ):
     auth_header: Optional[str] = request.headers.get("Authorization")
     token = auth_header.replace("Bearer", "") if auth_header else None
