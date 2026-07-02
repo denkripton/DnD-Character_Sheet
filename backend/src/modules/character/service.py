@@ -50,3 +50,19 @@ class CharacterService:
         char_dict = CharacterCreateSchema.model_validate(character).model_dump()
 
         return char_dict
+
+    async def delete_character(self, user_id, character_id):
+        existing_user = await self.user_repo.get_by_id(user_id)
+
+        if existing_user is None:
+            raise ServiceError(code=422, msg="User does not exist")
+
+        character = await self.character_repo.get_one(id=character_id, owner_id=existing_user.id)
+
+        if character is None:
+            raise ServiceError(code=422, msg="Character does not exist")
+
+        await self.character_repo.delete_obj(character.id)
+        await self.character_repo.session.commit()
+
+        return {"message": "Character has been deleted"}
