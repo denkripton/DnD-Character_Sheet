@@ -100,12 +100,20 @@ class CharacterService:
         if character is None:
             raise ServiceError(code=422, msg="Character does not exist")
 
+        existing_stats = await self.stats_repo.get_one(character_id=character.id)
+
         random_stats = generate_random_stats()
         stats_dict = assign_stats(value_list=random_stats)
 
-        stats_data = {**stats_dict, "character_id": character.id}
-
-        stats = await self.stats_repo.create(**stats_data)
+        if existing_stats is not None:
+            for key, value in stats_dict.items():
+                setattr(existing_stats, key, value)
+            stats = existing_stats
+        else:
+            stats = await self.stats_repo.create(
+                **stats_dict, character_id=character.id
+            )
+            
         await self.stats_repo.session.commit()
         await self.stats_repo.session.refresh(stats)
 
