@@ -14,7 +14,7 @@ class Stat(Base):
         UUID(as_uuid=True), default=uuid.uuid4, primary_key=True
     )
     
-    strenght: Mapped[int] = mapped_column(Integer, nullable=False)
+    strength: Mapped[int] = mapped_column(Integer, nullable=False)
     dexterity: Mapped[int] = mapped_column(Integer, nullable=False)
     constitution: Mapped[int] = mapped_column(Integer, nullable=False)
     intelligence: Mapped[int] = mapped_column(Integer, nullable=False)

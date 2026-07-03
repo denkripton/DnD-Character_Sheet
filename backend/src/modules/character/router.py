@@ -1,5 +1,3 @@
-from typing import List
-
 from fastapi import APIRouter, Depends
 from src.modules.auth import get_current_user
 from src.modules.auth.schemas.exceptions.user_401 import User401
@@ -17,7 +15,7 @@ character_router = APIRouter(prefix="/chatacters", route_class=ErrorHandlingRout
     summary="Character creation (Protected)",
     tags=["Character CRUD's"],
     description="Create your character",
-    response_model=CharacterReadSchema,
+    # response_model=CharacterReadSchema,
     responses={
         401: {"model": User401},
         422: {"model": User422},
@@ -36,7 +34,7 @@ async def create_character(
     summary="Get all your characters (Protected)",
     tags=["Character CRUD's"],
     description="Get all your characters",
-    response_model=List[CharacterReadSchema],
+    # response_model=List[CharacterReadSchema],
     responses={
         401: {"model": User401},
     },
@@ -80,3 +78,21 @@ async def delete_character(
     service: CharacterService = Depends(get_character_service),
 ):
     return await service.delete_character(user_id=user_id, character_id=character_id)
+
+
+@character_router.post(
+    "/{character_id}/stats/create",
+    summary="Generate stats(Protected)",
+    tags=["Character CRUD's", "Stats CRUD`s"],
+    description="Generate random one of your character",
+    response_model=CharacterReadSchema,
+    responses={
+        422: {"model": User422},
+    },
+)
+async def generate_random_stats(
+    character_id: str,
+    user_id: str = Depends(get_current_user),
+    service: CharacterService = Depends(get_character_service),
+):
+    return await service.generate_stats(user_id=user_id, character_id=character_id)
