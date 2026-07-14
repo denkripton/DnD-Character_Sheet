@@ -3,7 +3,7 @@ from src.modules.auth import get_current_user
 from src.modules.auth.schemas.exceptions.user_401 import User401
 from src.modules.auth.schemas.exceptions.user_422 import User422
 from src.modules.character.dependencies import get_character_service
-from src.modules.character.schemas import CharacterCreateSchema, CharacterReadSchema
+from src.modules.character.schemas import CharacterCreateSchema, CharacterReadSchema, StatsCreateSchema
 from src.modules.character.service import CharacterService
 from src.utils import ErrorHandlingRoute
 
@@ -81,7 +81,7 @@ async def delete_character(
 
 
 @character_router.post(
-    "/{character_id}/stats/create",
+    "/{character_id}/stats/create/generate",
     summary="Generate stats(Protected)",
     tags=["Character CRUD's", "Stats CRUD`s"],
     description="Generate random one of your character",
@@ -96,3 +96,22 @@ async def generate_random_stats(
     service: CharacterService = Depends(get_character_service),
 ):
     return await service.generate_stats(user_id=user_id, character_id=character_id)
+
+
+@character_router.post(
+    "/{character_id}/stats/create",
+    summary="Add stats on your own(Protected)",
+    tags=["Character CRUD's", "Stats CRUD`s"],
+    description="Add any stats you want to give your character",
+    response_model=CharacterReadSchema,
+    responses={
+        422: {"model": User422},
+    },
+)
+async def add_stats_yourself(
+    data: StatsCreateSchema,
+    character_id: str,
+    user_id: str = Depends(get_current_user),
+    service: CharacterService = Depends(get_character_service),
+):
+    return await service.add_stats(user_id=user_id, character_id=character_id, data=data)

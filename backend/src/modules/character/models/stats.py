@@ -1,13 +1,21 @@
 import uuid
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, UUID, DateTime, func, Integer, ForeignKey
+from sqlalchemy import String, UUID, DateTime, func, Integer, ForeignKey, CheckConstraint
 
 from src.databases.sql import Base
 
 
 class Stat(Base):
     __tablename__ = "stats"
+    __table_args__ = (
+        CheckConstraint('strength >= 8', name='ck_strength_min'),
+        CheckConstraint('dexterity >= 8', name='ck_dexterity_min'),
+        CheckConstraint('constitution >= 8', name='ck_constitution_min'),
+        CheckConstraint('intelligence >= 8', name='ck_intelligence_min'),
+        CheckConstraint('wisdom >= 8', name='ck_wisdom_min'),
+        CheckConstraint('charisma >= 8', name='ck_charisma_min'),
+    )
 
 
     id: Mapped[uuid.UUID] = mapped_column(

@@ -1,8 +1,12 @@
 from src.exceptions import ServiceError
 from src.modules.auth.repository import UserRepository
 from src.modules.character.repositories import CharacterRepository, StatsRepository
-from src.modules.character.schemas import CharacterCreateSchema, CharacterReadSchema
-from src.modules.character.utils import assign_stats, generate_random_stats
+from src.modules.character.schemas import (
+    CharacterCreateSchema,
+    CharacterReadSchema,
+    StatsCreateSchema,
+)
+from src.modules.character.utils import assign_stats, generate_random_stats, compute_modifiers
 
 
 class CharacterService:
@@ -44,7 +48,7 @@ class CharacterService:
             char_dict = CharacterCreateSchema.model_validate(char).model_dump()
             char_dict["id"] = char.id
             if stats is not None:
-                char_dict["stats"] = {
+                stats_dict = {
                     "strength": stats.strength,
                     "dexterity": stats.dexterity,
                     "constitution": stats.constitution,
@@ -52,8 +56,11 @@ class CharacterService:
                     "wisdom": stats.wisdom,
                     "charisma": stats.charisma,
                 }
+                char_dict["stats"] = stats_dict
+                char_dict["modifiers"] = compute_modifiers(stats_dict)
             else:
                 char_dict["stats"] = None
+                char_dict["modifiers"] = None
 
             return_list.append(char_dict)
         return return_list
@@ -66,6 +73,23 @@ class CharacterService:
             raise ServiceError(code=422, msg="Character does not exist")
 
         char_dict = CharacterCreateSchema.model_validate(character).model_dump()
+        char_dict["id"] = character.id
+        
+        stats = await self.stats_repo.get_one(character_id=character.id)
+        if stats is not None:
+            stats_dict = {
+                "strength": stats.strength,
+                "dexterity": stats.dexterity,
+                "constitution": stats.constitution,
+                "intelligence": stats.intelligence,
+                "wisdom": stats.wisdom,
+                "charisma": stats.charisma,
+            }
+            char_dict["stats"] = stats_dict
+            char_dict["modifiers"] = compute_modifiers(stats_dict)
+        else:
+            char_dict["stats"] = None
+            char_dict["modifiers"] = None
 
         return char_dict
 
@@ -113,7 +137,7 @@ class CharacterService:
             stats = await self.stats_repo.create(
                 **stats_dict, character_id=character.id
             )
-            
+
         await self.stats_repo.session.commit()
         await self.stats_repo.session.refresh(stats)
 
@@ -122,5 +146,48 @@ class CharacterService:
             spec_class=character.spec_class,
             kind=character.kind,
             stats=stats_dict,
+            modifiers=compute_modifiers(stats_dict),
+            id=character.id,
+        )
+
+    async def add_stats(self, user_id, character_id, data: StatsCreateSchema):
+        existing_user = await self.user_repo.get_by_id(user_id)
+
+        if existing_user is None:
+            raise ServiceError(code=422, msg="User does not exist")
+
+        character = await self.character_repo.get_one(
+            id=character_id, owner_id=existing_user.id
+        )
+
+        if character is None:
+            raise ServiceError(code=422, msg="Character does not exist")
+
+        existing_stats = await self.stats_repo.get_one(character_id=character.id)
+
+        value_list = [
+            data.strength, data.dexterity, data.constitution,
+            data.intelligence, data.wisdom, data.charisma
+        ]
+        stats_dict = assign_stats(value_list=value_list)
+
+        if existing_stats is not None:
+            for key, value in stats_dict.items():
+                setattr(existing_stats, key, value)
+            stats = existing_stats
+        else:
+            stats = await self.stats_repo.create(
+                **stats_dict, character_id=character.id
+            )
+
+        await self.stats_repo.session.commit()
+        await self.stats_repo.session.refresh(stats)
+
+        return CharacterReadSchema(
+            name=character.name,
+            spec_class=character.spec_class,
+            kind=character.kind,
+            stats=stats_dict,
+            modifiers=compute_modifiers(stats_dict),
             id=character.id,
         )

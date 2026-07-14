@@ -11,5 +11,7 @@ def assign_stats(value_list):
 
     for i, key in enumerate(template_stats.keys()):
         if i < len(value_list):
-            template_stats[key] = (value_list[i] - 10) // 2
+            template_stats[key] = value_list[i]
     return template_stats
+
+
