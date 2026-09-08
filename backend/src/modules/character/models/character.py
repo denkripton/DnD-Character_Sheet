@@ -1,7 +1,7 @@
 import uuid
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, UUID, DateTime, func, Integer, ForeignKey
+from sqlalchemy import String, UUID, DateTime, func, Integer, ForeignKey, Text
 
 from src.databases.sql import Base
 
@@ -17,6 +17,10 @@ class Character(Base):
     name: Mapped[str] = mapped_column(String(100))
     spec_class: Mapped[str] = mapped_column(String(20), nullable=False)
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    alignment: Mapped[str] = mapped_column(String(30), nullable=True)
+    background: Mapped[str] = mapped_column(String(50), nullable=True)
+    experience_points: Mapped[int] = mapped_column(Integer, nullable=True, default=0)
+    level: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -29,6 +33,18 @@ class Character(Base):
     )
 
     stats: Mapped["Stat"] = relationship(back_populates="character", uselist=False)
+    combat: Mapped["Combat"] = relationship(back_populates="character", uselist=False)
+    saving_throws: Mapped["SavingThrows"] = relationship(
+        back_populates="character", uselist=False
+    )
+    skills: Mapped[list["Skill"]] = relationship(back_populates="character")
+    proficiencies: Mapped[list["Proficiency"]] = relationship(
+        back_populates="character"
+    )
+    features: Mapped[list["Feature"]] = relationship(back_populates="character")
+    personality: Mapped["Personality"] = relationship(
+        back_populates="character", uselist=False
+    )
 
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
 

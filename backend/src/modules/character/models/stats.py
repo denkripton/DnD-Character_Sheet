@@ -9,12 +9,12 @@ from src.databases.sql import Base
 class Stat(Base):
     __tablename__ = "stats"
     __table_args__ = (
-        CheckConstraint('strength >= 8', name='ck_strength_min'),
-        CheckConstraint('dexterity >= 8', name='ck_dexterity_min'),
-        CheckConstraint('constitution >= 8', name='ck_constitution_min'),
-        CheckConstraint('intelligence >= 8', name='ck_intelligence_min'),
-        CheckConstraint('wisdom >= 8', name='ck_wisdom_min'),
-        CheckConstraint('charisma >= 8', name='ck_charisma_min'),
+        CheckConstraint('strength >= 3 AND strength <= 20', name='ck_strength_range'),
+        CheckConstraint('dexterity >= 3 AND dexterity <= 20', name='ck_dexterity_range'),
+        CheckConstraint('constitution >= 3 AND constitution <= 20', name='ck_constitution_range'),
+        CheckConstraint('intelligence >= 3 AND intelligence <= 20', name='ck_intelligence_range'),
+        CheckConstraint('wisdom >= 3 AND wisdom <= 20', name='ck_wisdom_range'),
+        CheckConstraint('charisma >= 3 AND charisma <= 20', name='ck_charisma_range'),
     )
 
 
