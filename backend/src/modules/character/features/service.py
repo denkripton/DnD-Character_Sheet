@@ -2,6 +2,7 @@ from src.exceptions import ServiceError
 from src.modules.character.features.schemas import FeatureCreateSchema
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.repositories import FeatureRepository
+from src.modules.character.utils.random_features import generate_random_features
 
 
 class FeatureService:
@@ -14,6 +15,23 @@ class FeatureService:
     ):
         self.ownership = ownership_guard
         self.repo = feature_repository
+
+    async def generate_features(self, user_id, character_id, count: int | None = None):
+        character = await self.ownership.get_owned(user_id, character_id)
+        existing = {
+            feature.name
+            for feature in await self.repo.get_many(character_id=character.id)
+        }
+
+        created = []
+        for item in generate_random_features(count, exclude=existing):
+            obj = await self.repo.create(**item, character_id=character.id)
+            created.append(obj)
+
+        await self.repo.session.commit()
+        for obj in created:
+            await self.repo.session.refresh(obj)
+        return created
 
     async def get_features(self, user_id, character_id):
         await self.ownership.get_owned(user_id, character_id)
