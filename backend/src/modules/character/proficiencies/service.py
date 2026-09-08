@@ -2,6 +2,7 @@ from src.exceptions import ServiceError
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.proficiencies.schemas import ProficiencyCreateSchema
 from src.modules.character.repositories import ProficiencyRepository
+from src.modules.character.utils.random_proficiencies import generate_random_proficiencies
 
 
 class ProficiencyService:
@@ -14,6 +15,22 @@ class ProficiencyService:
     ):
         self.ownership = ownership_guard
         self.repo = proficiency_repository
+
+    async def generate_proficiencies(self, user_id, character_id, count: int | None = None):
+        character = await self.ownership.get_owned(user_id, character_id)
+        existing = {
+            prof.name for prof in await self.repo.get_many(character_id=character.id)
+        }
+
+        created = []
+        for item in generate_random_proficiencies(count, exclude=existing):
+            obj = await self.repo.create(**item, character_id=character.id)
+            created.append(obj)
+
+        await self.repo.session.commit()
+        for obj in created:
+            await self.repo.session.refresh(obj)
+        return created
 
     async def get_proficiencies(self, user_id, character_id):
         await self.ownership.get_owned(user_id, character_id)
