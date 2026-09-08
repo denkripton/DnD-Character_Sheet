@@ -34,6 +34,27 @@ async def create_character(
     return await service.character_creation(user_id=user_id, data=data)
 
 
+@router.post(
+    "/generate",
+    summary="Generate a random character (Protected)",
+    tags=["Character CRUD's"],
+    description=(
+        "Generate a character with a random name, class, species, alignment "
+        "and background, then save it. Returns the created character."
+    ),
+    response_model=CharacterReadSchema,
+    responses={
+        401: {"model": User401},
+        422: {"model": User422},
+    },
+)
+async def generate_character(
+    user_id: str = Depends(get_current_user),
+    service: CharacterService = Depends(get_character_service),
+):
+    return await service.generate_character(user_id=user_id)
+
+
 @router.get(
     "/my",
     summary="Get all your characters (Protected)",

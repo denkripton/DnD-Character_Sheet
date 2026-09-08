@@ -12,6 +12,7 @@ from src.modules.character.repositories import (
     StatsRepository,
 )
 from src.modules.character.utils.hit_points import recalculate_combat_hit_dice
+from src.modules.character.utils.random_character import generate_random_character
 
 
 class CharacterService:
@@ -43,6 +44,12 @@ class CharacterService:
         await self.character_repo.session.refresh(character)
 
         return CharacterReadSchema.model_validate(character)
+
+    async def generate_character(self, user_id):
+        payload = generate_random_character()
+        return await self.character_creation(
+            user_id, CharacterCreateSchema(**payload)
+        )
 
     async def update_character(self, user_id, character_id, data: CharacterUpdateSchema):
         character = await self.ownership.get_owned(user_id, character_id)
