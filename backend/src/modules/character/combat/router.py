@@ -52,3 +52,26 @@ async def set_combat(
     return await service.set_combat(
         user_id=user_id, character_id=character_id, data=data
     )
+
+
+@router.post(
+    "/generate",
+    summary="Generate random combat info (Protected)",
+    tags=["Combat CRUD's"],
+    description=(
+        "Generate random armor class, initiative, speed and temporary hit "
+        "points for a character. Hit dice, max hit points and the proficiency "
+        "bonus are still computed from level and stats per the PHB."
+    ),
+    response_model=CombatReadSchema,
+    responses={
+        401: {"model": User401},
+        422: {"model": User422},
+    },
+)
+async def generate_combat(
+    character_id: str,
+    user_id: str = Depends(get_current_user),
+    service: CombatService = Depends(get_combat_service),
+):
+    return await service.generate_combat(user_id=user_id, character_id=character_id)

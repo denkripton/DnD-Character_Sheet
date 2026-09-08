@@ -1,6 +1,7 @@
 from src.modules.character.combat.schemas import CombatCreateSchema
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.repositories import CombatRepository, StatsRepository
+from src.modules.character.utils.random_combat import generate_random_combat
 from src.modules.character.utils.hit_points import (
     calculate_max_hit_points,
     get_class_hit_die,
@@ -36,6 +37,12 @@ class CombatService:
     async def get_combat(self, user_id, character_id):
         await self.ownership.get_owned(user_id, character_id)
         return await self.repo.get_one(character_id=character_id)
+
+    async def generate_combat(self, user_id, character_id):
+        payload = generate_random_combat()
+        return await self.set_combat(
+            user_id, character_id, CombatCreateSchema(**payload)
+        )
 
     async def set_combat(self, user_id, character_id, data: CombatCreateSchema):
         character = await self.ownership.get_owned(user_id, character_id)
