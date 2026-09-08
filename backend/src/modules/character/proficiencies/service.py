@@ -1,0 +1,59 @@
+from src.exceptions import ServiceError
+from src.modules.character.utils.ownership import CharacterOwnershipGuard
+from src.modules.character.proficiencies.schemas import ProficiencyCreateSchema
+from src.modules.character.repositories import ProficiencyRepository
+
+
+class ProficiencyService:
+    item_name = "proficiency"
+
+    def __init__(
+        self,
+        ownership_guard: CharacterOwnershipGuard,
+        proficiency_repository: ProficiencyRepository,
+    ):
+        self.ownership = ownership_guard
+        self.repo = proficiency_repository
+
+    async def get_proficiencies(self, user_id, character_id):
+        await self.ownership.get_owned(user_id, character_id)
+        return await self.repo.get_many(character_id=character_id)
+
+    async def add_proficiency(self, user_id, character_id, data: ProficiencyCreateSchema):
+        character = await self.ownership.get_owned(user_id, character_id)
+        obj = await self.repo.create(
+            **data.model_dump(mode="json"), character_id=character.id
+        )
+
+        await self.repo.session.commit()
+        await self.repo.session.refresh(obj)
+        return obj
+
+    async def update_proficiency(
+        self, user_id, character_id, proficiency_id, data: ProficiencyCreateSchema
+    ):
+        await self.ownership.get_owned(user_id, character_id)
+        obj = await self.repo.get_one(id=proficiency_id, character_id=character_id)
+        if obj is None:
+            raise ServiceError(
+                code=422, msg=f"{self.item_name.capitalize()} does not exist"
+            )
+
+        for key, value in data.model_dump(mode="json").items():
+            setattr(obj, key, value)
+
+        await self.repo.session.commit()
+        await self.repo.session.refresh(obj)
+        return obj
+
+    async def delete_proficiency(self, user_id, character_id, proficiency_id):
+        await self.ownership.get_owned(user_id, character_id)
+        obj = await self.repo.get_one(id=proficiency_id, character_id=character_id)
+        if obj is None:
+            raise ServiceError(
+                code=422, msg=f"{self.item_name.capitalize()} does not exist"
+            )
+
+        await self.repo.delete_obj(obj.id)
+        await self.repo.session.commit()
+        return {"message": f"{self.item_name.capitalize()} has been deleted"}
