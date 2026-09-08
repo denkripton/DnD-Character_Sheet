@@ -1,0 +1,19 @@
+from fastapi import Depends
+
+from src.modules.character.dependencies import (
+    character_ownership_guard,
+    feature_repository,
+)
+from src.modules.character.features.service import FeatureService
+from src.modules.character.utils.ownership import CharacterOwnershipGuard
+from src.modules.character.repositories import FeatureRepository
+
+
+def get_feature_service(
+    ownership: CharacterOwnershipGuard = Depends(character_ownership_guard),
+    feature_repo: FeatureRepository = Depends(feature_repository),
+) -> FeatureService:
+    return FeatureService(
+        ownership_guard=ownership,
+        feature_repository=feature_repo,
+    )
