@@ -2,6 +2,7 @@ from src.exceptions import ServiceError
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.repositories import SkillRepository
 from src.modules.character.skills.schemas import SkillCreateSchema
+from src.modules.character.utils.random_skills import generate_random_skills
 
 
 class SkillService:
@@ -14,6 +15,20 @@ class SkillService:
     ):
         self.ownership = ownership_guard
         self.repo = skill_repository
+
+    async def generate_skills(self, user_id, character_id, count: int | None = None):
+        character = await self.ownership.get_owned(user_id, character_id)
+        existing = {skill.name for skill in await self.repo.get_many(character_id=character.id)}
+
+        created = []
+        for item in generate_random_skills(count, exclude=existing):
+            obj = await self.repo.create(**item, character_id=character.id)
+            created.append(obj)
+
+        await self.repo.session.commit()
+        for obj in created:
+            await self.repo.session.refresh(obj)
+        return created
 
     async def get_skills(self, user_id, character_id):
         await self.ownership.get_owned(user_id, character_id)
