@@ -37,6 +37,19 @@ def test_get_personality_none_when_absent():
     asyncio.run(flow())
 
 
+def test_generate_personality_saves():
+    service, user_id, char_id = _build()
+
+    async def flow():
+        result = await service.generate_personality(user_id, char_id)
+        assert result.personality_traits
+        assert result.ideals
+        assert result.bonds
+        assert result.flaws
+
+    asyncio.run(flow())
+
+
 def test_set_personality_creates():
     service, user_id, char_id = _build()
 

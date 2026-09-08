@@ -41,6 +41,17 @@ def test_add_feature_creates():
     asyncio.run(flow())
 
 
+def test_generate_features_adds_set():
+    service, _, user_id = _build()
+
+    async def flow():
+        created = await service.generate_features(user_id, CHAR_ID, count=2)
+        assert len(created) == 2
+        assert len({feature.name for feature in created}) == 2
+
+    asyncio.run(flow())
+
+
 def test_update_feature_changes_fields():
     service, _, user_id = _build()
 

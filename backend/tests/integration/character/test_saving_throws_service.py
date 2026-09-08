@@ -37,6 +37,17 @@ def test_get_saving_throws_none_when_absent():
     asyncio.run(flow())
 
 
+def test_generate_saving_throws_saves():
+    service, user_id, char_id = _build()
+
+    async def flow():
+        result = await service.generate_saving_throws(user_id, char_id)
+        keys = ("strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma")
+        assert 1 <= sum(getattr(result, key) for key in keys) <= 2
+
+    asyncio.run(flow())
+
+
 def test_set_saving_throws_creates():
     service, user_id, char_id = _build()
 

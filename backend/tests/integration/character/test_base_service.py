@@ -82,6 +82,23 @@ def test_character_creation_creates_and_read():
     asyncio.run(flow())
 
 
+def test_generate_character_creates_random():
+    base, _, _, user_id, _, _ = _services()
+
+    async def flow():
+        created = await base.generate_character(user_id)
+        assert created.name
+        assert created.spec_class
+        assert created.kind
+        assert created.alignment
+        assert created.background
+
+        fetched = await base.get_character_by_id(created.id)
+        assert fetched.id == created.id
+
+    asyncio.run(flow())
+
+
 def test_character_creation_missing_user_raises():
     base, _, _, _, _, _ = _services()
 

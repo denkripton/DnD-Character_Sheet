@@ -41,6 +41,20 @@ def test_add_skill_creates():
     asyncio.run(flow())
 
 
+def test_generate_skills_adds_set_and_skips_existing():
+    service, _, user_id = _build()
+
+    async def flow():
+        created = await service.generate_skills(user_id, CHAR_ID, count=3)
+        assert len(created) == 3
+        assert len({skill.name for skill in created}) == 3
+
+        again = await service.generate_skills(user_id, CHAR_ID, count=3)
+        assert not ({skill.name for skill in again} & {skill.name for skill in created})
+
+    asyncio.run(flow())
+
+
 def test_update_skill_changes_fields():
     service, _, user_id = _build()
 

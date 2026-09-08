@@ -41,6 +41,17 @@ def test_add_proficiency_creates():
     asyncio.run(flow())
 
 
+def test_generate_proficiencies_adds_set():
+    service, _, user_id = _build()
+
+    async def flow():
+        created = await service.generate_proficiencies(user_id, CHAR_ID, count=3)
+        assert len(created) == 3
+        assert len({prof.name for prof in created}) == 3
+
+    asyncio.run(flow())
+
+
 def test_update_proficiency_changes_fields():
     service, _, user_id = _build()
 

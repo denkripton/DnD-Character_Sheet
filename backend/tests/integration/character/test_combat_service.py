@@ -126,6 +126,28 @@ def test_set_combat_upserts_and_resets_current_hp():
     asyncio.run(flow())
 
 
+def test_generate_combat_saves_random_values():
+    combat, stats, user_id, _ = _build()
+
+    async def flow():
+        await stats.add_stats(
+            user_id,
+            CHAR_ID,
+            StatsCreateSchema(
+                strength=15, dexterity=14, constitution=15,
+                intelligence=8, wisdom=10, charisma=8,
+            ),
+        )
+        result = await combat.generate_combat(user_id, CHAR_ID)
+        assert 10 <= result.armor_class <= 18
+        assert -1 <= result.initiative <= 7
+        assert result.hit_dice_total == "1d12"
+        assert result.max_hp == 14 + result.bonus_hp
+        assert result.current_hp == result.max_hp
+
+    asyncio.run(flow())
+
+
 def test_get_combat_returns_existing():
     combat, _, user_id, _ = _build()
 
