@@ -1,6 +1,9 @@
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.repositories import SavingThrowsRepository
 from src.modules.character.saving_throws.schemas import SavingThrowsCreateSchema
+from src.modules.character.utils.random_saving_throws import (
+    generate_random_saving_throws,
+)
 
 
 class SavingThrowsService:
@@ -27,6 +30,12 @@ class SavingThrowsService:
     async def get_saving_throws(self, user_id, character_id):
         await self.ownership.get_owned(user_id, character_id)
         return await self.repo.get_one(character_id=character_id)
+
+    async def generate_saving_throws(self, user_id, character_id):
+        payload = generate_random_saving_throws()
+        return await self.set_saving_throws(
+            user_id, character_id, SavingThrowsCreateSchema(**payload)
+        )
 
     async def set_saving_throws(self, user_id, character_id, data: SavingThrowsCreateSchema):
         await self.ownership.get_owned(user_id, character_id)
