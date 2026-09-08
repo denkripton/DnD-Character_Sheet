@@ -1,6 +1,7 @@
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.personality.schemas import PersonalityCreateSchema
 from src.modules.character.repositories import PersonalityRepository
+from src.modules.character.utils.random_personality import generate_random_personality
 
 
 class PersonalityService:
@@ -27,6 +28,12 @@ class PersonalityService:
     async def get_personality(self, user_id, character_id):
         await self.ownership.get_owned(user_id, character_id)
         return await self.repo.get_one(character_id=character_id)
+
+    async def generate_personality(self, user_id, character_id):
+        payload = generate_random_personality()
+        return await self.set_personality(
+            user_id, character_id, PersonalityCreateSchema(**payload)
+        )
 
     async def set_personality(self, user_id, character_id, data: PersonalityCreateSchema):
         await self.ownership.get_owned(user_id, character_id)
