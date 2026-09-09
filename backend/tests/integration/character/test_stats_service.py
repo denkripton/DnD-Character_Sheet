@@ -14,6 +14,7 @@ from src.modules.character.combat.service import CombatService
 from src.modules.character.models import Character, Combat, Stat
 from src.modules.character.stats.schemas import StatsCreateSchema
 from src.modules.character.stats.service import StatsService
+from src.modules.character.utils.enums.stats import Stats
 from tests.utils import FakeRepo, build_guard
 
 
@@ -161,6 +162,18 @@ def test_generate_stats_random_in_range():
         result = await stats.generate_stats(user_id, CHAR_ID, method="random")
         for value in result["stats"].values():
             assert 3 <= value <= 18
+
+    asyncio.run(flow())
+
+
+def test_generate_stats_point_buy_spends_27_points():
+    _, stats, _, user_id, _, _ = _build()
+
+    async def flow():
+        result = await stats.generate_stats(user_id, CHAR_ID, method="point_buy")
+        costs = Stats.STATS_COST.value
+        assert all(8 <= value <= 15 for value in result["stats"].values())
+        assert sum(costs[value] for value in result["stats"].values()) == Stats.STATS_POINTS.value
 
     asyncio.run(flow())
 

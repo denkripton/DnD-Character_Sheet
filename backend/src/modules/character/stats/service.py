@@ -4,6 +4,7 @@ from src.modules.character.stats.schemas import StatsCreateSchema
 from src.modules.character.utils import (
     assign_stats,
     compute_modifiers,
+    generate_point_buy_stats,
     generate_random_stats,
     generate_standard_array,
     recalculate_combat_hit_dice,
@@ -83,6 +84,8 @@ class StatsService:
 
         if method == "standard":
             generated = generate_standard_array()
+        elif method == "point_buy":
+            generated = generate_point_buy_stats()
         else:
             generated = generate_random_stats()
 

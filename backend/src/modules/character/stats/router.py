@@ -39,9 +39,10 @@ async def get_stats(
     summary="Generate stats (Protected)",
     tags=["Stats CRUD's"],
     description=(
-        "Generate stats for one of your characters. "
-        "method='random' rolls 4d6 and drops the lowest die for each score "
-        "(PHB), method='standard' uses the standard array 15, 14, 13, 12, 10, 8."
+        "Generate stats for one of your characters. method='random' rolls 4d6 "
+        "and drops the lowest die for each score (PHB), method='standard' uses "
+        "the standard array 15, 14, 13, 12, 10, 8, method='point_buy' randomly "
+        "spends the 27 point buy points (scores 8-15) across the six abilities."
     ),
     response_model=StatsResponseSchema,
     responses={
@@ -51,8 +52,9 @@ async def get_stats(
 )
 async def generate_random_stats(
     character_id: str,
-    method: Literal["random", "standard"] = Query(
-        "random", description="Generation method: random (4d6) or standard array"
+    method: Literal["random", "standard", "point_buy"] = Query(
+        "random",
+        description="Generation method: random (4d6), standard array, or point_buy (27 points)",
     ),
     user_id: str = Depends(get_current_user),
     service: StatsService = Depends(get_stats_service),
