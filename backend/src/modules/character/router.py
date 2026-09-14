@@ -8,6 +8,7 @@ from src.modules.character.skills import router as skills_router
 from src.modules.character.proficiencies import router as proficiencies_router
 from src.modules.character.features import router as features_router
 from src.modules.character.personality import router as personality_router
+from src.modules.character.backstory import router as backstory_router
 
 character_router = APIRouter()
 
@@ -19,3 +20,4 @@ character_router.include_router(skills_router)
 character_router.include_router(proficiencies_router)
 character_router.include_router(features_router)
 character_router.include_router(personality_router)
+character_router.include_router(backstory_router)

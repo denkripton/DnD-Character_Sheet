@@ -5,6 +5,7 @@ from src.modules.auth.dependencies import user_repository
 from src.modules.auth.repository import UserRepository
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.repositories import (
+    BackstoryRepository,
     CharacterRepository,
     CombatRepository,
     FeatureRepository,
@@ -23,6 +24,7 @@ skill_repository = RepoFactory(repo=SkillRepository)
 proficiency_repository = RepoFactory(repo=ProficiencyRepository)
 feature_repository = RepoFactory(repo=FeatureRepository)
 personality_repository = RepoFactory(repo=PersonalityRepository)
+backstory_repository = RepoFactory(repo=BackstoryRepository)
 
 
 def character_ownership_guard(

@@ -45,6 +45,9 @@ class Character(Base):
     personality: Mapped["Personality"] = relationship(
         back_populates="character", uselist=False
     )
+    backstory: Mapped["Backstory"] = relationship(
+        back_populates="character", uselist=False
+    )
 
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
 

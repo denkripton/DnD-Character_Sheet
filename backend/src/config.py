@@ -9,6 +9,9 @@ class Settings(BaseSettings):
 
     JWT_SECRET_KEY: str
 
+    GEMINI_API_KEY: str
+    DEFAULT_AI_MODEL: str
+
     model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()
