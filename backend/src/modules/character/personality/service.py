@@ -1,6 +1,10 @@
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
-from src.modules.character.personality.schemas import PersonalityCreateSchema
+from src.modules.character.personality.schemas import (
+    PersonalityCreateSchema,
+    PersonalityReadSchema,
+)
 from src.modules.character.repositories import PersonalityRepository
+from src.repositories.redis import cache
 from src.modules.character.utils.random_personality import generate_random_personality
 
 
@@ -23,11 +27,25 @@ class PersonalityService:
 
         await self.repo.session.commit()
         await self.repo.session.refresh(obj)
+        await cache.delete_pattern(f"personality:{character_id}")
         return obj
 
     async def get_personality(self, user_id, character_id):
         await self.ownership.get_owned(user_id, character_id)
-        return await self.repo.get_one(character_id=character_id)
+        key = f"personality:{character_id}"
+        cached = await cache.get(key)
+        if cached is not None:
+            return PersonalityReadSchema(**cached)
+
+        personality = await self.repo.get_one(character_id=character_id)
+        result = (
+            PersonalityReadSchema.model_validate(personality)
+            if personality is not None
+            else None
+        )
+        if result is not None:
+            await cache.set(key, result.model_dump(mode="json"))
+        return result
 
     async def generate_personality(self, user_id, character_id):
         payload = generate_random_personality()
