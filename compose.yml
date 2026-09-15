@@ -8,6 +8,13 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
     networks:
       - internal
 

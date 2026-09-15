@@ -24,6 +24,10 @@ services:
     ports:
       - "5433:5432"
 
+  redis:
+    ports:
+      - "6379:6379"
+
 networks:
   internal:
     internal: false
