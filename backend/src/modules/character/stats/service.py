@@ -1,6 +1,7 @@
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.repositories import CombatRepository, StatsRepository
 from src.modules.character.stats.schemas import StatsCreateSchema
+from src.repositories.redis import cache
 from src.modules.character.utils import (
     assign_stats,
     compute_modifiers,
@@ -35,6 +36,7 @@ class StatsService:
         await self.stats_repo.session.commit()
         await self.stats_repo.session.refresh(stats)
 
+        await cache.delete_pattern(f"stats:{character.id}")
         await self._recalculate_combat(character, stats)
 
         return stats
@@ -45,12 +47,20 @@ class StatsService:
             recalculate_combat_hit_dice(combat, character, stats)
             await self.combat_repo.session.commit()
             await self.combat_repo.session.refresh(combat)
+            await cache.delete_pattern(f"combat:{character.id}")
 
     async def get_stats(self, user_id, character_id):
         await self.ownership.get_owned(user_id, character_id)
+        key = f"stats:{character_id}"
+        cached = await cache.get(key)
+        if cached is not None:
+            return cached
+
         stats = await self.stats_repo.get_one(character_id=character_id)
         if stats is None:
-            return {"stats": None, "modifiers": None}
+            result = {"stats": None, "modifiers": None}
+            await cache.set(key, result)
+            return result
 
         stats_dict = {
             "strength": stats.strength,
@@ -60,7 +70,9 @@ class StatsService:
             "wisdom": stats.wisdom,
             "charisma": stats.charisma,
         }
-        return {"stats": stats_dict, "modifiers": compute_modifiers(stats_dict)}
+        result = {"stats": stats_dict, "modifiers": compute_modifiers(stats_dict)}
+        await cache.set(key, result)
+        return result
 
     async def add_stats(self, user_id, character_id, data: StatsCreateSchema):
         character = await self.ownership.get_owned(user_id, character_id)
