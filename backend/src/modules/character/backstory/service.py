@@ -1,7 +1,11 @@
 from src.exceptions import ServiceError
 from src.modules.ai import AIGateway
 from src.modules.character.backstory.prompt import build_backstory_prompt
-from src.modules.character.backstory.schemas import BackstoryCreateSchema
+from src.modules.character.backstory.schemas import (
+    BackstoryCreateSchema,
+    BackstoryReadSchema,
+)
+from src.repositories.redis import cache
 from src.modules.character.repositories import (
     BackstoryRepository,
     CombatRepository,
@@ -50,6 +54,7 @@ class BackstoryService:
 
         await self.repo.session.commit()
         await self.repo.session.refresh(obj)
+        await cache.delete_pattern(f"backstory:{character_id}")
         return obj
 
     async def _context(self, character_id):
@@ -93,7 +98,18 @@ class BackstoryService:
 
     async def get_backstory(self, user_id, character_id):
         await self.ownership.get_owned(user_id, character_id)
-        return await self.repo.get_one(character_id=character_id)
+        key = f"backstory:{character_id}"
+        cached = await cache.get(key)
+        if cached is not None:
+            return BackstoryReadSchema(**cached)
+
+        backstory = await self.repo.get_one(character_id=character_id)
+        result = (
+            BackstoryReadSchema.model_validate(backstory) if backstory is not None else None
+        )
+        if result is not None:
+            await cache.set(key, result.model_dump(mode="json"))
+        return result
 
     async def set_backstory(
         self, user_id, character_id, data: BackstoryCreateSchema
