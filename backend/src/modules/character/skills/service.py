@@ -1,7 +1,11 @@
 from src.exceptions import ServiceError
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.repositories import SkillRepository
-from src.modules.character.skills.schemas import SkillCreateSchema
+from src.modules.character.skills.schemas import (
+    SkillCreateSchema,
+    SkillReadSchema,
+)
+from src.repositories.redis import cache
 from src.modules.character.utils.random_skills import generate_random_skills
 
 
@@ -28,11 +32,20 @@ class SkillService:
         await self.repo.session.commit()
         for obj in created:
             await self.repo.session.refresh(obj)
+        await cache.delete_pattern(f"skills:{character.id}")
         return created
 
     async def get_skills(self, user_id, character_id):
         await self.ownership.get_owned(user_id, character_id)
-        return await self.repo.get_many(character_id=character_id)
+        key = f"skills:{character_id}"
+        cached = await cache.get(key)
+        if cached is not None:
+            return [SkillReadSchema(**c) for c in cached]
+
+        skills = await self.repo.get_many(character_id=character_id)
+        result = [SkillReadSchema.model_validate(s) for s in skills]
+        await cache.set(key, [s.model_dump(mode="json") for s in result])
+        return result
 
     async def add_skill(self, user_id, character_id, data: SkillCreateSchema):
         character = await self.ownership.get_owned(user_id, character_id)
@@ -40,6 +53,7 @@ class SkillService:
 
         await self.repo.session.commit()
         await self.repo.session.refresh(obj)
+        await cache.delete_pattern(f"skills:{character.id}")
         return obj
 
     async def update_skill(self, user_id, character_id, skill_id, data: SkillCreateSchema):
@@ -55,6 +69,7 @@ class SkillService:
 
         await self.repo.session.commit()
         await self.repo.session.refresh(obj)
+        await cache.delete_pattern(f"skills:{character_id}")
         return obj
 
     async def delete_skill(self, user_id, character_id, skill_id):
@@ -67,4 +82,5 @@ class SkillService:
 
         await self.repo.delete_obj(obj.id)
         await self.repo.session.commit()
+        await cache.delete_pattern(f"skills:{character_id}")
         return {"message": f"{self.item_name.capitalize()} has been deleted"}
