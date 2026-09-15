@@ -23,7 +23,7 @@ class DummyUser:
         self.id = id
 
 
-def _build():
+def _build(char_id=CHAR_ID):
     user_repo = FakeRepo(model=DummyUser)
     character_repo = FakeRepo(model=Character)
     stats_repo = FakeRepo(model=Stat)
@@ -31,7 +31,7 @@ def _build():
     guard = build_guard(character_repo, user_repo, "user-1")
 
     char = Character(
-        id=CHAR_ID,
+        id=char_id,
         name="Grog",
         spec_class="Barbarian",
         kind="Human",
@@ -117,10 +117,11 @@ def test_get_stats_returns_stats_and_modifiers():
 
 
 def test_get_stats_none_when_absent():
-    _, stats, _, user_id, _, _ = _build()
+    fresh_id = uuid.uuid4()
+    _, stats, _, user_id, _, _ = _build(char_id=fresh_id)
 
     async def flow():
-        result = await stats.get_stats(user_id, CHAR_ID)
+        result = await stats.get_stats(user_id, fresh_id)
         assert result == {"stats": None, "modifiers": None}
 
     asyncio.run(flow())
