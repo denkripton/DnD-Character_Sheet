@@ -1,4 +1,8 @@
-from src.modules.character.combat.schemas import CombatCreateSchema
+from src.modules.character.combat.schemas import (
+    CombatCreateSchema,
+    CombatReadSchema,
+)
+from src.repositories.redis import cache
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.repositories import CombatRepository, StatsRepository
 from src.modules.character.utils.random_combat import generate_random_combat
@@ -32,11 +36,23 @@ class CombatService:
 
         await self.repo.session.commit()
         await self.repo.session.refresh(obj)
+        await cache.delete_pattern(f"combat:{character_id}")
         return obj
 
     async def get_combat(self, user_id, character_id):
         await self.ownership.get_owned(user_id, character_id)
-        return await self.repo.get_one(character_id=character_id)
+        key = f"combat:{character_id}"
+        cached = await cache.get(key)
+        if cached is not None:
+            return CombatReadSchema(**cached)
+
+        combat = await self.repo.get_one(character_id=character_id)
+        result = (
+            CombatReadSchema.model_validate(combat) if combat is not None else None
+        )
+        if result is not None:
+            await cache.set(key, result.model_dump(mode="json"))
+        return result
 
     async def generate_combat(self, user_id, character_id):
         payload = generate_random_combat()
