@@ -1,4 +1,5 @@
 from src.exceptions import ServiceError
+from src.repositories.redis import cache
 from src.modules.auth.repository import UserRepository
 from src.modules.character.base.schemas import (
     CharacterCreateSchema,
@@ -43,6 +44,8 @@ class CharacterService:
         await self.character_repo.session.commit()
         await self.character_repo.session.refresh(character)
 
+        await cache.delete_pattern(f"characters:list:{user_id}*")
+
         return CharacterReadSchema.model_validate(character)
 
     async def generate_character(self, user_id):
@@ -64,6 +67,9 @@ class CharacterService:
         await self.character_repo.session.commit()
         await self.character_repo.session.refresh(character)
 
+        await cache.delete_pattern(f"characters:by_id:{character_id}")
+        await cache.delete_pattern(f"characters:list:{user_id}*")
+
         if "level" in update or "spec_class" in update or "kind" in update:
             await self._recalculate_combat(character)
 
@@ -77,22 +83,40 @@ class CharacterService:
         recalculate_combat_hit_dice(combat, character, stats)
         await self.combat_repo.session.commit()
         await self.combat_repo.session.refresh(combat)
+        await cache.delete_pattern(f"combat:{character.id}")
 
     async def get_all_characters(self, user_id):
+        key = f"characters:list:{user_id}"
+        cached = await cache.get(key)
+        if cached is not None:
+            return [CharacterReadSchema(**c) for c in cached]
+
         characters = await self.character_repo.get_many(owner_id=user_id)
-        return [CharacterReadSchema.model_validate(char) for char in characters]
+        result = [CharacterReadSchema.model_validate(char) for char in characters]
+        await cache.set(key, [c.model_dump(mode="json") for c in result])
+        return result
 
     async def get_character_by_id(self, character_id):
+        key = f"characters:by_id:{character_id}"
+        cached = await cache.get(key)
+        if cached is not None:
+            return CharacterReadSchema(**cached)
+
         character = await self.character_repo.get_by_id(character_id)
         if character is None:
             raise ServiceError(code=422, msg="Character does not exist")
 
-        return CharacterReadSchema.model_validate(character)
+        result = CharacterReadSchema.model_validate(character)
+        await cache.set(key, result.model_dump(mode="json"))
+        return result
 
     async def delete_character(self, user_id, character_id):
         character = await self.ownership.get_owned(user_id, character_id)
 
         await self.character_repo.delete_obj(character.id)
         await self.character_repo.session.commit()
+
+        await cache.delete_pattern(f"*:{character_id}")
+        await cache.delete_pattern(f"characters:list:{user_id}*")
 
         return {"message": "Character has been deleted"}
