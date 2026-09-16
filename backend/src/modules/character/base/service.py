@@ -1,5 +1,6 @@
 from src.exceptions import ServiceError
 from src.repositories.redis import cache
+from src.utils.unit_of_work import UnitOfWork
 from src.modules.auth.repository import UserRepository
 from src.modules.character.base.schemas import (
     CharacterCreateSchema,
@@ -24,12 +25,14 @@ class CharacterService:
         ownership_guard: CharacterOwnershipGuard,
         combat_repository: CombatRepository,
         stats_repository: StatsRepository,
+        unit_of_work: UnitOfWork,
     ):
         self.character_repo = character_repository
         self.user_repo = user_repository
         self.ownership = ownership_guard
         self.combat_repo = combat_repository
         self.stats_repo = stats_repository
+        self.uow = unit_of_work
 
     async def character_creation(self, user_id, data: CharacterCreateSchema):
         data = data.model_dump()
@@ -41,8 +44,8 @@ class CharacterService:
         data["owner_id"] = user_id
 
         character = await self.character_repo.create(**data)
-        await self.character_repo.session.commit()
-        await self.character_repo.session.refresh(character)
+        await self.uow.commit()
+        await self.uow.refresh(character)
 
         await cache.delete_pattern(f"characters:list:{user_id}*")
 
@@ -64,14 +67,14 @@ class CharacterService:
         for key, value in update.items():
             setattr(character, key, value)
 
-        await self.character_repo.session.commit()
-        await self.character_repo.session.refresh(character)
+        if "level" in update or "spec_class" in update or "kind" in update:
+            await self._recalculate_combat(character)
+
+        await self.uow.commit()
+        await self.uow.refresh(character)
 
         await cache.delete_pattern(f"characters:by_id:{character_id}")
         await cache.delete_pattern(f"characters:list:{user_id}*")
-
-        if "level" in update or "spec_class" in update or "kind" in update:
-            await self._recalculate_combat(character)
 
         return CharacterReadSchema.model_validate(character)
 
@@ -81,8 +84,6 @@ class CharacterService:
             return
         stats = await self.stats_repo.get_one(character_id=character.id)
         recalculate_combat_hit_dice(combat, character, stats)
-        await self.combat_repo.session.commit()
-        await self.combat_repo.session.refresh(combat)
         await cache.delete_pattern(f"combat:{character.id}")
 
     async def get_all_characters(self, user_id):
@@ -114,7 +115,7 @@ class CharacterService:
         character = await self.ownership.get_owned(user_id, character_id)
 
         await self.character_repo.delete_obj(character.id)
-        await self.character_repo.session.commit()
+        await self.uow.commit()
 
         await cache.delete_pattern(f"*:{character_id}")
         await cache.delete_pattern(f"characters:list:{user_id}*")
