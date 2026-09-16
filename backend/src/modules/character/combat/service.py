@@ -3,6 +3,7 @@ from src.modules.character.combat.schemas import (
     CombatReadSchema,
 )
 from src.repositories.redis import cache
+from src.utils.unit_of_work import UnitOfWork
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.repositories import CombatRepository, StatsRepository
 from src.modules.character.utils.random_combat import generate_random_combat
@@ -21,10 +22,12 @@ class CombatService:
         ownership_guard: CharacterOwnershipGuard,
         combat_repository: CombatRepository,
         stats_repository: StatsRepository,
+        unit_of_work: UnitOfWork,
     ):
         self.ownership = ownership_guard
         self.repo = combat_repository
         self.stats_repo = stats_repository
+        self.uow = unit_of_work
 
     async def _upsert(self, character_id, data: dict):
         obj = await self.repo.get_one(character_id=character_id)
@@ -34,8 +37,8 @@ class CombatService:
         else:
             obj = await self.repo.create(character_id=character_id, **data)
 
-        await self.repo.session.commit()
-        await self.repo.session.refresh(obj)
+        await self.uow.commit()
+        await self.uow.refresh(obj)
         await cache.delete_pattern(f"combat:{character_id}")
         return obj
 
