@@ -1,0 +1,1 @@
+DEAD_LETTER_QUEUE_SUFFIX = ".dlq"

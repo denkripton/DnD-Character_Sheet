@@ -1,10 +1,13 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
-from src.modules.auth import user_router
+from src.dependencies import get_message_bus
 from src.modules.ai import ai_router
+from src.modules.auth import user_router
 from src.modules.character.router import character_router
-from src.utils.interfaces.application import Application
 from src.utils import register_exception_handlers
+from src.utils.interfaces.application import Application
 from src.utils.metadata import (
     contact,
     openapi_url,
@@ -13,6 +16,17 @@ from src.utils.metadata import (
     title,
     version,
 )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    bus = get_message_bus()
+    await bus.start()
+    app.state.message_bus = bus
+    try:
+        yield
+    finally:
+        await bus.close()
 
 
 class API(Application):
@@ -34,10 +48,12 @@ class API(Application):
             version=self.version,
             openapi_url=self.openapi_url,
             contact=self.contact,
+            lifespan=lifespan,
         )
         for router in self.routers:
             self.app.include_router(router=router)
         register_exception_handlers(app=self.app)
+
 
 api = API()
 api.create()

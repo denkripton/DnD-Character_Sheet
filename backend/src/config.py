@@ -18,6 +18,14 @@ class Settings(BaseSettings):
 
     REDIS_URL: str
 
+    RABBITMQ_URL: str
+    RABBITMQ_EXCHANGE: str
+    RABBITMQ_QUEUE_PREFIX: str
+
+    RABBITMQ_EXCHANGE_TYPE: str = "topic"
+    RABBITMQ_PREFETCH_COUNT: int = 10
+    RABBITMQ_RECONNECT_INTERVAL_SECONDS: float = 5.0
+
     model_config = SettingsConfigDict(
     env_file=Path(__file__).resolve().parents[2] / ".env",
     extra="ignore",
