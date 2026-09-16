@@ -5,6 +5,7 @@ from src.modules.character.saving_throws.schemas import (
     SavingThrowsReadSchema,
 )
 from src.repositories.redis import cache
+from src.utils.unit_of_work import UnitOfWork
 from src.modules.character.utils.random_saving_throws import (
     generate_random_saving_throws,
 )
@@ -15,9 +16,11 @@ class SavingThrowsService:
         self,
         ownership_guard: CharacterOwnershipGuard,
         saving_throws_repository: SavingThrowsRepository,
+        unit_of_work: UnitOfWork,
     ):
         self.ownership = ownership_guard
         self.repo = saving_throws_repository
+        self.uow = unit_of_work
 
     async def _upsert(self, character_id, data: dict):
         obj = await self.repo.get_one(character_id=character_id)
@@ -27,8 +30,8 @@ class SavingThrowsService:
         else:
             obj = await self.repo.create(character_id=character_id, **data)
 
-        await self.repo.session.commit()
-        await self.repo.session.refresh(obj)
+        await self.uow.commit()
+        await self.uow.refresh(obj)
         await cache.delete_pattern(f"saving_throws:{character_id}")
         return obj
 
