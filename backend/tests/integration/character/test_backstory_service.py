@@ -20,7 +20,7 @@ from src.modules.character.models import (
     Skill,
     Stat,
 )
-from tests.utils import FakeRepo, build_guard, build_owned_character
+from tests.utils import FakeRepo, FakeUnitOfWork, build_guard, build_owned_character
 
 
 class FakeAI:
@@ -46,6 +46,7 @@ def _build(text="A wandering hero seeks an ancient artifact."):
     character.background = "Soldier"
 
     ai = FakeAI(text=text)
+    uow = FakeUnitOfWork()
     service = BackstoryService(
         ownership_guard=guard,
         backstory_repository=FakeRepo(model=Backstory),
@@ -57,6 +58,7 @@ def _build(text="A wandering hero seeks an ancient artifact."):
         skill_repository=FakeRepo(model=Skill),
         proficiency_repository=FakeRepo(model=Proficiency),
         saving_throws_repository=FakeRepo(model=SavingThrows),
+        unit_of_work=uow,
     )
     return service, "user-1", CHAR_ID, ai
 

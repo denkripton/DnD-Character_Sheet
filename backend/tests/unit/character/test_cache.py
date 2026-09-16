@@ -5,7 +5,7 @@ import importlib
 from src.modules.character.models import Character, Skill
 from src.modules.character.skills.schemas import SkillAbility, SkillCreateSchema
 from src.modules.character.skills.service import SkillService
-from tests.utils import FakeRepo, build_guard, build_owned_character
+from tests.utils import FakeRepo, FakeUnitOfWork, build_guard, build_owned_character
 
 
 class _Patch:
@@ -53,7 +53,7 @@ def test_skills_get_is_cached_and_write_invalidates(monkeypatch=_Patch()):
         character_repo = FakeRepo(model=Character)
         guard = build_guard(character_repo, user_repo, "user-1")
         repo = CountingRepo(model=Skill)
-        svc = SkillService(ownership_guard=guard, skill_repository=repo)
+        svc = SkillService(ownership_guard=guard, skill_repository=repo, unit_of_work=FakeUnitOfWork())
         character = build_owned_character(character_repo)
         char_id = character.id
 

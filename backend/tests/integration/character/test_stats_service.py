@@ -15,7 +15,7 @@ from src.modules.character.models import Character, Combat, Stat
 from src.modules.character.stats.schemas import StatsCreateSchema
 from src.modules.character.stats.service import StatsService
 from src.modules.character.utils.enums.stats import Stats
-from tests.utils import FakeRepo, build_guard
+from tests.utils import FakeRepo, FakeUnitOfWork, build_guard
 
 
 class DummyUser:
@@ -39,22 +39,27 @@ def _build(char_id=CHAR_ID):
     )
     character_repo.rows.append(char)
 
+    uow = FakeUnitOfWork()
+
     base = CharacterService(
         character_repository=character_repo,
         user_repository=user_repo,
         ownership_guard=guard,
         combat_repository=combat_repo,
         stats_repository=stats_repo,
+        unit_of_work=uow,
     )
     stats = StatsService(
         ownership_guard=guard,
         stats_repository=stats_repo,
         combat_repository=combat_repo,
+        unit_of_work=uow,
     )
     combat = CombatService(
         ownership_guard=guard,
         combat_repository=combat_repo,
         stats_repository=stats_repo,
+        unit_of_work=uow,
     )
     return base, stats, combat, "user-1", combat_repo, character_repo
 

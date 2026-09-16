@@ -10,7 +10,7 @@ from src.exceptions import ServiceError
 from src.modules.character.models import Character, Proficiency
 from src.modules.character.proficiencies.schemas import ProficiencyCreateSchema
 from src.modules.character.proficiencies.service import ProficiencyService
-from tests.utils import FakeRepo, build_guard, build_owned_character
+from tests.utils import FakeRepo, FakeUnitOfWork, build_guard, build_owned_character
 
 
 class DummyUser:
@@ -24,7 +24,10 @@ def _build():
     repo = FakeRepo(model=Proficiency)
     guard = build_guard(character_repo, user_repo, "user-1")
     build_owned_character(character_repo, CHAR_ID)
-    service = ProficiencyService(ownership_guard=guard, proficiency_repository=repo)
+    uow = FakeUnitOfWork()
+    service = ProficiencyService(
+        ownership_guard=guard, proficiency_repository=repo, unit_of_work=uow
+    )
     return service, repo, "user-1"
 
 

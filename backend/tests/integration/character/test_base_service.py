@@ -15,7 +15,7 @@ from src.modules.character.combat.service import CombatService
 from src.modules.character.models import Character, Combat, Stat
 from src.modules.character.stats.schemas import StatsCreateSchema
 from src.modules.character.stats.service import StatsService
-from tests.utils import FakeRepo, build_guard, build_owned_character
+from tests.utils import FakeRepo, FakeUnitOfWork, build_guard, build_owned_character
 
 CHAR_ID = uuid.uuid4()
 OTHER_CHAR_ID = uuid.uuid4()
@@ -33,6 +33,7 @@ def _services():
     stats_repo = FakeRepo(model=Stat)
     combat_repo = FakeRepo(model=Combat)
     guard = build_guard(character_repo, user_repo, "user-1")
+    uow = FakeUnitOfWork()
 
     base = CharacterService(
         character_repository=character_repo,
@@ -40,16 +41,19 @@ def _services():
         ownership_guard=guard,
         combat_repository=combat_repo,
         stats_repository=stats_repo,
+        unit_of_work=uow,
     )
     stats = StatsService(
         ownership_guard=guard,
         stats_repository=stats_repo,
         combat_repository=combat_repo,
+        unit_of_work=uow,
     )
     combat = CombatService(
         ownership_guard=guard,
         combat_repository=combat_repo,
         stats_repository=stats_repo,
+        unit_of_work=uow,
     )
     return base, stats, combat, "user-1", combat_repo, character_repo
 

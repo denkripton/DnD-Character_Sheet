@@ -12,7 +12,7 @@ from src.modules.character.combat.service import CombatService
 from src.modules.character.models import Character, Combat, Stat
 from src.modules.character.stats.schemas import StatsCreateSchema
 from src.modules.character.stats.service import StatsService
-from tests.utils import FakeRepo, build_guard, build_owned_character
+from tests.utils import FakeRepo, FakeUnitOfWork, build_guard, build_owned_character
 
 
 class DummyUser:
@@ -34,15 +34,19 @@ def _build(spec_class="Barbarian", kind="Human"):
         kind=kind,
     )
 
+    uow = FakeUnitOfWork()
+
     stats = StatsService(
         ownership_guard=guard,
         stats_repository=stats_repo,
         combat_repository=combat_repo,
+        unit_of_work=uow,
     )
     combat = CombatService(
         ownership_guard=guard,
         combat_repository=combat_repo,
         stats_repository=stats_repo,
+        unit_of_work=uow,
     )
     return combat, stats, "user-1", combat_repo
 

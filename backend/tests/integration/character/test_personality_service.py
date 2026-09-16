@@ -9,7 +9,7 @@ from src.exceptions import ServiceError
 from src.modules.character.models import Character, Personality
 from src.modules.character.personality.schemas import PersonalityCreateSchema
 from src.modules.character.personality.service import PersonalityService
-from tests.utils import FakeRepo, build_guard, build_owned_character
+from tests.utils import FakeRepo, FakeUnitOfWork, build_guard, build_owned_character
 
 
 class DummyUser:
@@ -22,8 +22,11 @@ def _build():
     character_repo = FakeRepo(model=Character)
     guard = build_guard(character_repo, user_repo, "user-1")
     build_owned_character(character_repo, CHAR_ID)
+    uow = FakeUnitOfWork()
     service = PersonalityService(
-        ownership_guard=guard, personality_repository=FakeRepo(model=Personality)
+        ownership_guard=guard,
+        personality_repository=FakeRepo(model=Personality),
+        unit_of_work=uow,
     )
     return service, "user-1", CHAR_ID
 

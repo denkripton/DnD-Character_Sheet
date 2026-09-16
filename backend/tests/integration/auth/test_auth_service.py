@@ -9,12 +9,14 @@ from src.modules.auth.schemas.user.login import UserLoginSchema
 from src.modules.auth.service import UserService
 from src.modules.auth.utils import pw_manager
 from src.modules.auth.utils.jwt_actions import JWT
-from tests.utils import FakeRepo
+from tests.utils import FakeRepo, FakeUnitOfWork
 
 
 def _build():
     user_repo = FakeRepo(model=User)
-    service = UserService(user_repository=user_repo, jwt=JWT())
+    service = UserService(
+        user_repository=user_repo, jwt=JWT(), unit_of_work=FakeUnitOfWork()
+    )
     return service, user_repo
 
 

@@ -10,7 +10,7 @@ from src.exceptions import ServiceError
 from src.modules.character.features.schemas import FeatureCreateSchema
 from src.modules.character.features.service import FeatureService
 from src.modules.character.models import Character, Feature
-from tests.utils import FakeRepo, build_guard, build_owned_character
+from tests.utils import FakeRepo, FakeUnitOfWork, build_guard, build_owned_character
 
 
 class DummyUser:
@@ -24,7 +24,10 @@ def _build():
     repo = FakeRepo(model=Feature)
     guard = build_guard(character_repo, user_repo, "user-1")
     build_owned_character(character_repo, CHAR_ID)
-    service = FeatureService(ownership_guard=guard, feature_repository=repo)
+    uow = FakeUnitOfWork()
+    service = FeatureService(
+        ownership_guard=guard, feature_repository=repo, unit_of_work=uow
+    )
     return service, repo, "user-1"
 
 

@@ -11,6 +11,24 @@ class FakeSession:
     async def refresh(self, obj):
         return obj
 
+    async def rollback(self):
+        pass
+
+
+class FakeUnitOfWork:
+    def __init__(self):
+        self.commit_calls = 0
+        self.rollback_calls = 0
+
+    async def commit(self):
+        self.commit_calls += 1
+
+    async def rollback(self):
+        self.rollback_calls += 1
+
+    async def refresh(self, obj):
+        return obj
+
 
 class FakeRepo:
     def __init__(self, model):
