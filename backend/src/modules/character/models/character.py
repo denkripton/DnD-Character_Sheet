@@ -32,23 +32,41 @@ class Character(Base):
         nullable=False,
     )
 
-    stats: Mapped["Stat"] = relationship(back_populates="character", uselist=False)
-    combat: Mapped["Combat"] = relationship(back_populates="character", uselist=False)
+    stats: Mapped["Stat"] = relationship(
+        back_populates="character", uselist=False,
+        passive_deletes="all", lazy="raise",
+    )
+    combat: Mapped["Combat"] = relationship(
+        back_populates="character", uselist=False,
+        passive_deletes="all", lazy="raise",
+    )
     saving_throws: Mapped["SavingThrows"] = relationship(
-        back_populates="character", uselist=False
+        back_populates="character", uselist=False,
+        passive_deletes="all", lazy="raise",
     )
-    skills: Mapped[list["Skill"]] = relationship(back_populates="character")
+    skills: Mapped[list["Skill"]] = relationship(
+        back_populates="character",
+        passive_deletes="all", lazy="raise",
+    )
     proficiencies: Mapped[list["Proficiency"]] = relationship(
-        back_populates="character"
+        back_populates="character",
+        passive_deletes="all", lazy="raise",
     )
-    features: Mapped[list["Feature"]] = relationship(back_populates="character")
+    features: Mapped[list["Feature"]] = relationship(
+        back_populates="character",
+        passive_deletes="all", lazy="raise",
+    )
     personality: Mapped["Personality"] = relationship(
-        back_populates="character", uselist=False
+        back_populates="character", uselist=False,
+        passive_deletes="all", lazy="raise",
     )
     backstory: Mapped["Backstory"] = relationship(
-        back_populates="character", uselist=False
+        back_populates="character", uselist=False,
+        passive_deletes="all", lazy="raise",
     )
 
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
 
-    owner: Mapped["User"] = relationship(back_populates="character")
+    owner: Mapped["User"] = relationship(
+        back_populates="character", lazy="raise",
+    )

@@ -31,7 +31,8 @@ class SavingThrows(Base):
     )
 
     character_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("characters.id"), nullable=False, unique=True
+        ForeignKey("characters.id", ondelete="CASCADE"),
+        nullable=False, unique=True,
     )
     character: Mapped["Character"] = relationship(
         back_populates="saving_throws", uselist=False

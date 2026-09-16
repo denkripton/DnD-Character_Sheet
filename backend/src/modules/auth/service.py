@@ -1,11 +1,11 @@
-from src.exceptions import ServiceError
-from src.utils.unit_of_work import UnitOfWork
+from sqlalchemy.exc import IntegrityError
 
+from src.exceptions import ServiceError
+from src.modules.auth.repository import UserRepository
 from src.modules.auth.schemas.user.creation import UserCreateSchema
 from src.modules.auth.schemas.user.login import UserLoginSchema
-
-from src.modules.auth.repository import UserRepository
-from src.modules.auth.utils import pw_manager, JWT
+from src.modules.auth.utils import JWT, pw_manager
+from src.utils.unit_of_work import UnitOfWork
 
 
 class UserService:
@@ -31,7 +31,12 @@ class UserService:
 
         user = await self.repo.create(**data)
 
-        await self.uow.commit()
+        try:
+            await self.uow.commit()
+        except IntegrityError:
+            await self.uow.rollback()
+            raise ServiceError(code=422, msg="User already exists")
+
         await self.uow.refresh(user)
         return user
 

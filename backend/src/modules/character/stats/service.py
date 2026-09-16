@@ -1,8 +1,7 @@
-from src.modules.character.utils.ownership import CharacterOwnershipGuard
+from sqlalchemy.exc import IntegrityError
+
 from src.modules.character.repositories import CombatRepository, StatsRepository
 from src.modules.character.stats.schemas import StatsCreateSchema
-from src.repositories.redis import cache
-from src.utils.unit_of_work import UnitOfWork
 from src.modules.character.utils import (
     assign_stats,
     compute_modifiers,
@@ -11,6 +10,9 @@ from src.modules.character.utils import (
     generate_standard_array,
     recalculate_combat_hit_dice,
 )
+from src.modules.character.utils.ownership import CharacterOwnershipGuard
+from src.repositories.redis import cache
+from src.utils.unit_of_work import UnitOfWork
 
 
 class StatsService:
@@ -38,7 +40,18 @@ class StatsService:
 
         await self._recalculate_combat(character, stats)
 
-        await self.uow.commit()
+        try:
+            await self.uow.commit()
+        except IntegrityError:
+            await self.uow.rollback()
+            stats = await self.stats_repo.get_one(character_id=character.id)
+            if stats is None:
+                raise
+            for key, value in stats_dict.items():
+                setattr(stats, key, value)
+            await self._recalculate_combat(character, stats)
+            await self.uow.commit()
+
         await self.uow.refresh(stats)
 
         await cache.delete_pattern(f"stats:{character.id}")

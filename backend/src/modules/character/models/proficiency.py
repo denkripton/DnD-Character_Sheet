@@ -27,6 +27,6 @@ class Proficiency(Base):
     )
 
     character_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("characters.id"), nullable=False
+        ForeignKey("characters.id", ondelete="CASCADE"), nullable=False,
     )
     character: Mapped["Character"] = relationship(back_populates="proficiencies")

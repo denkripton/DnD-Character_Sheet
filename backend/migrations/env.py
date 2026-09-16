@@ -16,6 +16,7 @@ from src.modules.character.models.skill import Skill
 from src.modules.character.models.proficiency import Proficiency
 from src.modules.character.models.feature import Feature
 from src.modules.character.models.personality import Personality
+from src.modules.character.models.backstory import Backstory
 
 config = context.config
 
