@@ -1,5 +1,6 @@
 from fastapi import Depends
 
+from src.dependencies import get_unit_of_work
 from src.modules.ai import AIGateway, get_ai_client
 from src.modules.character.backstory.service import BackstoryService
 from src.modules.character.dependencies import (
@@ -24,6 +25,7 @@ from src.modules.character.repositories import (
     StatsRepository,
 )
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
+from src.utils.unit_of_work import UnitOfWork
 
 
 def get_backstory_service(
@@ -37,6 +39,7 @@ def get_backstory_service(
     skill_repo: SkillRepository = Depends(skill_repository),
     proficiency_repo: ProficiencyRepository = Depends(proficiency_repository),
     saving_throws_repo: SavingThrowsRepository = Depends(saving_throws_repository),
+    uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> BackstoryService:
     return BackstoryService(
         ownership_guard=ownership,
@@ -49,4 +52,5 @@ def get_backstory_service(
         skill_repository=skill_repo,
         proficiency_repository=proficiency_repo,
         saving_throws_repository=saving_throws_repo,
+        unit_of_work=uow,
     )

@@ -6,6 +6,7 @@ from src.modules.character.backstory.schemas import (
     BackstoryReadSchema,
 )
 from src.repositories.redis import cache
+from src.utils.unit_of_work import UnitOfWork
 from src.modules.character.repositories import (
     BackstoryRepository,
     CombatRepository,
@@ -32,6 +33,7 @@ class BackstoryService:
         skill_repository: SkillRepository,
         proficiency_repository: ProficiencyRepository,
         saving_throws_repository: SavingThrowsRepository,
+        unit_of_work: UnitOfWork,
     ):
         self.ownership = ownership_guard
         self.repo = backstory_repository
@@ -43,6 +45,7 @@ class BackstoryService:
         self.skill_repo = skill_repository
         self.proficiency_repo = proficiency_repository
         self.saving_throws_repo = saving_throws_repository
+        self.uow = unit_of_work
 
     async def _upsert(self, character_id, data: dict):
         obj = await self.repo.get_one(character_id=character_id)
@@ -52,8 +55,8 @@ class BackstoryService:
         else:
             obj = await self.repo.create(character_id=character_id, **data)
 
-        await self.repo.session.commit()
-        await self.repo.session.refresh(obj)
+        await self.uow.commit()
+        await self.uow.refresh(obj)
         await cache.delete_pattern(f"backstory:{character_id}")
         return obj
 
