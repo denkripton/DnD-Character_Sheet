@@ -5,6 +5,7 @@ from src.modules.character.proficiencies.schemas import (
     ProficiencyReadSchema,
 )
 from src.repositories.redis import cache
+from src.utils.unit_of_work import UnitOfWork
 from src.modules.character.repositories import ProficiencyRepository
 from src.modules.character.utils.random_proficiencies import generate_random_proficiencies
 
@@ -16,9 +17,11 @@ class ProficiencyService:
         self,
         ownership_guard: CharacterOwnershipGuard,
         proficiency_repository: ProficiencyRepository,
+        unit_of_work: UnitOfWork,
     ):
         self.ownership = ownership_guard
         self.repo = proficiency_repository
+        self.uow = unit_of_work
 
     async def generate_proficiencies(self, user_id, character_id, count: int | None = None):
         character = await self.ownership.get_owned(user_id, character_id)
@@ -31,9 +34,9 @@ class ProficiencyService:
             obj = await self.repo.create(**item, character_id=character.id)
             created.append(obj)
 
-        await self.repo.session.commit()
+        await self.uow.commit()
         for obj in created:
-            await self.repo.session.refresh(obj)
+            await self.uow.refresh(obj)
         await cache.delete_pattern(f"proficiencies:{character.id}")
         return created
 
@@ -55,8 +58,8 @@ class ProficiencyService:
             **data.model_dump(mode="json"), character_id=character.id
         )
 
-        await self.repo.session.commit()
-        await self.repo.session.refresh(obj)
+        await self.uow.commit()
+        await self.uow.refresh(obj)
         await cache.delete_pattern(f"proficiencies:{character.id}")
         return obj
 
@@ -73,8 +76,8 @@ class ProficiencyService:
         for key, value in data.model_dump(mode="json").items():
             setattr(obj, key, value)
 
-        await self.repo.session.commit()
-        await self.repo.session.refresh(obj)
+        await self.uow.commit()
+        await self.uow.refresh(obj)
         await cache.delete_pattern(f"proficiencies:{character_id}")
         return obj
 
@@ -87,6 +90,6 @@ class ProficiencyService:
             )
 
         await self.repo.delete_obj(obj.id)
-        await self.repo.session.commit()
+        await self.uow.commit()
         await cache.delete_pattern(f"proficiencies:{character_id}")
         return {"message": f"{self.item_name.capitalize()} has been deleted"}
