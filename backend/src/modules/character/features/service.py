@@ -4,6 +4,7 @@ from src.modules.character.features.schemas import (
     FeatureReadSchema,
 )
 from src.repositories.redis import cache
+from src.utils.unit_of_work import UnitOfWork
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.repositories import FeatureRepository
 from src.modules.character.utils.random_features import generate_random_features
@@ -16,9 +17,11 @@ class FeatureService:
         self,
         ownership_guard: CharacterOwnershipGuard,
         feature_repository: FeatureRepository,
+        unit_of_work: UnitOfWork,
     ):
         self.ownership = ownership_guard
         self.repo = feature_repository
+        self.uow = unit_of_work
 
     async def generate_features(self, user_id, character_id, count: int | None = None):
         character = await self.ownership.get_owned(user_id, character_id)
@@ -32,9 +35,9 @@ class FeatureService:
             obj = await self.repo.create(**item, character_id=character.id)
             created.append(obj)
 
-        await self.repo.session.commit()
+        await self.uow.commit()
         for obj in created:
-            await self.repo.session.refresh(obj)
+            await self.uow.refresh(obj)
         await cache.delete_pattern(f"features:{character.id}")
         return created
 
@@ -56,8 +59,8 @@ class FeatureService:
             **data.model_dump(mode="json"), character_id=character.id
         )
 
-        await self.repo.session.commit()
-        await self.repo.session.refresh(obj)
+        await self.uow.commit()
+        await self.uow.refresh(obj)
         await cache.delete_pattern(f"features:{character.id}")
         return obj
 
@@ -72,8 +75,8 @@ class FeatureService:
         for key, value in data.model_dump(mode="json").items():
             setattr(obj, key, value)
 
-        await self.repo.session.commit()
-        await self.repo.session.refresh(obj)
+        await self.uow.commit()
+        await self.uow.refresh(obj)
         await cache.delete_pattern(f"features:{character_id}")
         return obj
 
@@ -86,6 +89,6 @@ class FeatureService:
             )
 
         await self.repo.delete_obj(obj.id)
-        await self.repo.session.commit()
+        await self.uow.commit()
         await cache.delete_pattern(f"features:{character_id}")
         return {"message": f"{self.item_name.capitalize()} has been deleted"}
