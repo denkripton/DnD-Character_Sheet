@@ -2,6 +2,7 @@ from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.repositories import CombatRepository, StatsRepository
 from src.modules.character.stats.schemas import StatsCreateSchema
 from src.repositories.redis import cache
+from src.utils.unit_of_work import UnitOfWork
 from src.modules.character.utils import (
     assign_stats,
     compute_modifiers,
@@ -18,10 +19,12 @@ class StatsService:
         ownership_guard: CharacterOwnershipGuard,
         stats_repository: StatsRepository,
         combat_repository: CombatRepository,
+        unit_of_work: UnitOfWork,
     ):
         self.ownership = ownership_guard
         self.stats_repo = stats_repository
         self.combat_repo = combat_repository
+        self.uow = unit_of_work
 
     async def _save_stats(self, character, stats_dict: dict):
         existing_stats = await self.stats_repo.get_one(character_id=character.id)
@@ -33,11 +36,12 @@ class StatsService:
         else:
             stats = await self.stats_repo.create(**stats_dict, character_id=character.id)
 
-        await self.stats_repo.session.commit()
-        await self.stats_repo.session.refresh(stats)
+        await self._recalculate_combat(character, stats)
+
+        await self.uow.commit()
+        await self.uow.refresh(stats)
 
         await cache.delete_pattern(f"stats:{character.id}")
-        await self._recalculate_combat(character, stats)
 
         return stats
 
@@ -45,8 +49,6 @@ class StatsService:
         combat = await self.combat_repo.get_one(character_id=character.id)
         if combat is not None:
             recalculate_combat_hit_dice(combat, character, stats)
-            await self.combat_repo.session.commit()
-            await self.combat_repo.session.refresh(combat)
             await cache.delete_pattern(f"combat:{character.id}")
 
     async def get_stats(self, user_id, character_id):
