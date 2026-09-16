@@ -5,6 +5,7 @@ from src.modules.character.personality.schemas import (
 )
 from src.modules.character.repositories import PersonalityRepository
 from src.repositories.redis import cache
+from src.utils.unit_of_work import UnitOfWork
 from src.modules.character.utils.random_personality import generate_random_personality
 
 
@@ -13,9 +14,11 @@ class PersonalityService:
         self,
         ownership_guard: CharacterOwnershipGuard,
         personality_repository: PersonalityRepository,
+        unit_of_work: UnitOfWork,
     ):
         self.ownership = ownership_guard
         self.repo = personality_repository
+        self.uow = unit_of_work
 
     async def _upsert(self, character_id, data: dict):
         obj = await self.repo.get_one(character_id=character_id)
@@ -25,8 +28,8 @@ class PersonalityService:
         else:
             obj = await self.repo.create(character_id=character_id, **data)
 
-        await self.repo.session.commit()
-        await self.repo.session.refresh(obj)
+        await self.uow.commit()
+        await self.uow.refresh(obj)
         await cache.delete_pattern(f"personality:{character_id}")
         return obj
 
