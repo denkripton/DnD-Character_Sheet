@@ -1,10 +1,11 @@
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, Response
-from src.dependencies import RepoFactory
+from src.dependencies import RepoFactory, get_unit_of_work
 from src.modules.auth.repository import UserRepository
 from src.modules.auth.service import UserService
 from src.modules.auth.utils import JWT
+from src.utils.unit_of_work import UnitOfWork
 
 user_repository = RepoFactory(repo=UserRepository)
 
@@ -21,8 +22,13 @@ class UserServiceFactory:
         self,
         user_repo: UserRepository,
         jwt: JWT,
+        unit_of_work: UnitOfWork,
     ) -> UserService:
-        return self.service_cls(user_repository=user_repo, jwt=jwt)
+        return self.service_cls(
+            user_repository=user_repo,
+            jwt=jwt,
+            unit_of_work=unit_of_work,
+        )
 
 
 user_service_factory = UserServiceFactory()
@@ -31,8 +37,9 @@ user_service_factory = UserServiceFactory()
 def get_user_service(
     user_repo: UserRepository = Depends(user_repository),
     jwt: JWT = Depends(get_jwt_service),
+    uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> UserService:
-    return user_service_factory.create(user_repo=user_repo, jwt=jwt)
+    return user_service_factory.create(user_repo=user_repo, jwt=jwt, unit_of_work=uow)
 
 
 async def get_current_user(

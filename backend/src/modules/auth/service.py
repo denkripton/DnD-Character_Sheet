@@ -1,4 +1,5 @@
 from src.exceptions import ServiceError
+from src.utils.unit_of_work import UnitOfWork
 
 from src.modules.auth.schemas.user.creation import UserCreateSchema
 from src.modules.auth.schemas.user.login import UserLoginSchema
@@ -8,9 +9,15 @@ from src.modules.auth.utils import pw_manager, JWT
 
 
 class UserService:
-    def __init__(self, user_repository: UserRepository, jwt: JWT):
+    def __init__(
+        self,
+        user_repository: UserRepository,
+        jwt: JWT,
+        unit_of_work: UnitOfWork,
+    ):
         self.repo = user_repository
         self.jwt = jwt
+        self.uow = unit_of_work
 
     async def register(self, data: UserCreateSchema):
         data = data.model_dump()
@@ -24,8 +31,8 @@ class UserService:
 
         user = await self.repo.create(**data)
 
-        await self.repo.session.commit()
-        await self.repo.session.refresh(user)
+        await self.uow.commit()
+        await self.uow.refresh(user)
         return user
 
     async def login(self, data: UserLoginSchema):
