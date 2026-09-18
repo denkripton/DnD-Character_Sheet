@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     DEFAULT_AI_MODEL: str
 
     REDIS_URL: str
+    REDIS_CONNECT_TIMEOUT: float = 1.0
+    REDIS_SOCKET_TIMEOUT: float = 1.0
+    REDIS_MAX_CONNECTIONS: int | None = None
+    REDIS_HEALTH_CHECK_INTERVAL: int = 30
 
     RABBITMQ_URL: str
     RABBITMQ_EXCHANGE: str

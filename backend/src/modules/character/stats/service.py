@@ -11,7 +11,7 @@ from src.modules.character.utils import (
     recalculate_combat_hit_dice,
 )
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
-from src.repositories.redis import cache
+from src.infrastructure.redis import cache
 from src.utils.unit_of_work import UnitOfWork
 
 

@@ -1,5 +1,5 @@
 from src.exceptions import ServiceError
-from src.repositories.redis import cache
+from src.infrastructure.redis import cache
 from src.utils.unit_of_work import UnitOfWork
 from src.modules.auth.repository import UserRepository
 from src.modules.character.base.schemas import (

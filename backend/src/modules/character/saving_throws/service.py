@@ -4,7 +4,7 @@ from src.modules.character.saving_throws.schemas import (
     SavingThrowsCreateSchema,
     SavingThrowsReadSchema,
 )
-from src.repositories.redis import cache
+from src.infrastructure.redis import cache
 from src.utils.unit_of_work import UnitOfWork
 from src.modules.character.utils.random_saving_throws import (
     generate_random_saving_throws,

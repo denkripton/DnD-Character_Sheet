@@ -4,7 +4,7 @@ from src.infrastructure.rabbitmq.connection import RabbitMQConnection
 from src.infrastructure.rabbitmq.serialization import serialize
 from src.infrastructure.rabbitmq.topology import Topology
 from src.infrastructure.rabbitmq.utils import envelope_to_properties
-from src.messaging.constants import CONTENT_TYPE_JSON
+from src.messaging.enums.constants import CONTENT_TYPE_JSON
 from src.messaging.interfaces import MessagePublisher
 from src.messaging.messages import MessageEnvelope
 

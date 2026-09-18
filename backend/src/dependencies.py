@@ -1,4 +1,5 @@
 from fastapi import Depends
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
@@ -6,7 +7,10 @@ from src.databases.sql import AsyncSessionLocal
 from src.infrastructure.rabbitmq.bus import RabbitMQMessageBus
 from src.infrastructure.rabbitmq.connection import RabbitMQConnection
 from src.infrastructure.rabbitmq.topology import Topology
+from src.infrastructure.redis import cache, rate_limiter, redis
 from src.messaging.interfaces import MessageBus
+from src.utils.interfaces.cache import CacheRepository
+from src.utils.interfaces.rate_limiter import RateLimiter
 from src.utils.unit_of_work import UnitOfWork
 
 
@@ -35,6 +39,18 @@ class RepoFactory:
 
     def __call__(self, session: AsyncSession = Depends(get_session)):
         return self.repository_class(session)
+
+
+def get_redis_client() -> Redis:
+    return redis
+
+
+def get_cache() -> CacheRepository:
+    return cache
+
+
+def get_rate_limiter() -> RateLimiter:
+    return rate_limiter
 
 
 def get_message_bus() -> MessageBus:

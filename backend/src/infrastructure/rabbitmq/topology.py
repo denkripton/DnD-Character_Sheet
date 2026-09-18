@@ -1,7 +1,7 @@
 from aio_pika import ExchangeType
 from aio_pika.abc import AbstractChannel, AbstractQueue
 
-from src.messaging.constants import (
+from src.messaging.enums.constants import (
     DEAD_LETTER_ARGUMENT,
     DEAD_LETTER_EXCHANGE_SUFFIX,
     DEAD_LETTER_QUEUE_SUFFIX,

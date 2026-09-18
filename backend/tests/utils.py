@@ -1,7 +1,69 @@
+import fnmatch
 import uuid
 
 from src.modules.character.models import Character
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
+
+
+class FakeRedis:
+    def __init__(self, fail: bool = False):
+        self.store = {}
+        self.expirations = {}
+        self.fail = fail
+        self.closed = False
+
+    def _check(self):
+        if self.fail:
+            raise ConnectionError("redis is unavailable")
+
+    async def get(self, key):
+        self._check()
+        return self.store.get(key)
+
+    async def set(self, key, value, ex=None, **kwargs):
+        self._check()
+        self.store[key] = value
+        if ex is not None:
+            self.expirations[key] = ex
+        return True
+
+    async def delete(self, key):
+        self._check()
+        self.store.pop(key, None)
+        self.expirations.pop(key, None)
+        return 1
+
+    async def exists(self, key):
+        self._check()
+        return 1 if key in self.store else 0
+
+    async def incr(self, key):
+        self._check()
+        value = int(self.store.get(key, 0)) + 1
+        self.store[key] = value
+        return value
+
+    async def expire(self, key, seconds):
+        self._check()
+        self.expirations[key] = seconds
+        return True
+
+    async def ttl(self, key):
+        self._check()
+        return self.expirations.get(key, -1)
+
+    async def scan_iter(self, match=None, **kwargs):
+        self._check()
+        for key in list(self.store):
+            if match is None or fnmatch.fnmatch(key, match):
+                yield key
+
+    async def ping(self):
+        self._check()
+        return True
+
+    async def aclose(self):
+        self.closed = True
 
 
 class FakeSession:

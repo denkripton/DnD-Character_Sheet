@@ -45,6 +45,3 @@ class RedisRepository(CacheRepository):
     async def scan(self, pattern: str):
         async for key in self.client.scan_iter(match=pattern):
             yield key
-
-
-cache: CacheRepository = RedisRepository()

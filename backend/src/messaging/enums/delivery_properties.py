@@ -1,11 +1,12 @@
-from dataclasses import dataclass, field
 from datetime import datetime
+from typing import NamedTuple
+
+from src.messaging.enums.constants import EMPTY_HEADERS
 
 
-@dataclass(frozen=True)
-class DeliveryProperties:
+class DeliveryProperties(NamedTuple):
     message_id: str | None = None
     correlation_id: str | None = None
     timestamp: datetime | None = None
-    headers: dict[str, str] = field(default_factory=dict)
+    headers: dict[str, str] = EMPTY_HEADERS
     type: str | None = None

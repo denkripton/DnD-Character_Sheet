@@ -5,7 +5,7 @@ from src.modules.character.backstory.schemas import (
     BackstoryCreateSchema,
     BackstoryReadSchema,
 )
-from src.repositories.redis import cache
+from src.infrastructure.redis import cache
 from src.utils.unit_of_work import UnitOfWork
 from src.modules.character.repositories import (
     BackstoryRepository,
