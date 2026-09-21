@@ -3,11 +3,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from src.config import settings
 from src.dependencies import get_message_bus
 from src.infrastructure.redis import cache, rate_limiter, redis
+from src.messaging.enums.constants import BOT_COMMAND_QUEUE, ROUTING_KEY_ALL_COMMANDS
 from src.modules.ai import ai_router
 from src.modules.auth import user_router
 from src.modules.character.router import character_router
+from src.modules.commands.dispatcher_factory import build_bot_command_dispatcher
 from src.utils import register_exception_handlers
 from src.utils.interfaces.application import Application
 from src.utils.metadata import (
@@ -27,6 +30,15 @@ async def lifespan(app: FastAPI):
     bus = get_message_bus()
     await bus.start()
     app.state.message_bus = bus
+
+    command_queue = f"{settings.RABBITMQ_QUEUE_PREFIX}.{BOT_COMMAND_QUEUE}"
+    command_dispatcher = build_bot_command_dispatcher(bus)
+    await bus.subscribe(
+        command_queue,
+        [ROUTING_KEY_ALL_COMMANDS],
+        command_dispatcher.handle,
+    )
+    app.state.command_dispatcher = command_dispatcher
 
     try:
         await redis.ping()

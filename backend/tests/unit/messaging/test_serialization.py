@@ -40,6 +40,17 @@ def test_serialize_produces_utf8_json_document():
     assert document["payload"] == {"x": 1}
 
 
+def test_serialize_is_deterministic():
+    envelope = MessageEnvelope(
+        type="character.generated.event",
+        correlation_id=uuid4(),
+        headers={"source": "bot"},
+        payload={"user_id": 7, "nested": {"a": [1, 2]}},
+    )
+
+    assert serialize(envelope) == serialize(envelope)
+
+
 def test_serialize_generates_default_identifiers():
     envelope = MessageEnvelope(type="character.updated")
 

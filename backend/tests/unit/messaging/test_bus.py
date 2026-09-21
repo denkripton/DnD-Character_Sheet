@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock
 
 from src.infrastructure.rabbitmq.bus import RabbitMQMessageBus
@@ -17,18 +18,16 @@ class FakeConnection:
     async def close(self):
         self.closed = True
 
+    @asynccontextmanager
     async def channel(self):
         channel = FakeChannel()
         self.channels.append(channel)
-        return channel
+        yield channel
 
 
 class FakeChannel:
     def __init__(self):
         self.is_closed = False
-
-    async def close(self):
-        self.is_closed = True
 
 
 class FakeTopology:

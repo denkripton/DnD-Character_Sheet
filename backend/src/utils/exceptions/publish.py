@@ -1,0 +1,2 @@
+class RabbitMQMessagePublishError(Exception):
+    pass

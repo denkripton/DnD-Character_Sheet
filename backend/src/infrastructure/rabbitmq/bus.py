@@ -14,6 +14,7 @@ class RabbitMQMessageBus(MessageBus):
         connection: RabbitMQConnection,
         topology: Topology,
         prefetch_count: int = 10,
+        max_retries: int = 3,
     ):
         self._connection = connection
         self._topology = topology
@@ -22,16 +23,13 @@ class RabbitMQMessageBus(MessageBus):
             connection=connection,
             topology=topology,
             prefetch_count=prefetch_count,
+            max_retries=max_retries,
         )
 
     async def start(self) -> None:
         await self._connection.connect()
-        channel = await self._connection.channel()
-        try:
+        async with self._connection.channel() as channel:
             await self._topology.declare(channel)
-        finally:
-            if not channel.is_closed:
-                await channel.close()
 
     async def close(self) -> None:
         await self._consumer.close()

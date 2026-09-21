@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     RABBITMQ_EXCHANGE_TYPE: str = "topic"
     RABBITMQ_PREFETCH_COUNT: int = 10
     RABBITMQ_RECONNECT_INTERVAL_SECONDS: float = 5.0
+    RABBITMQ_MAX_RETRIES: int = 3
+    RABBITMQ_RETRY_DELAY_SECONDS: float = 5.0
 
     model_config = SettingsConfigDict(
     env_file=Path(__file__).resolve().parents[2] / ".env",

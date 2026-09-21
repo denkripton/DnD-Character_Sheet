@@ -44,11 +44,13 @@ def test_topology_name_derivation():
 
     assert topology.exchange_name == "dnd.events"
     assert topology.dead_letter_exchange_name == "dnd.events.dlx"
+    assert topology.retry_exchange_name == "dnd.events.retryx"
     assert topology.queue_name("updates") == "backend.updates"
     assert topology.dead_letter_queue_name("backend.updates") == "backend.updates.dlq"
+    assert topology.retry_queue_name("backend.updates") == "backend.updates.retry"
 
 
-def test_declare_creates_main_and_dead_letter_exchanges():
+def test_declare_creates_main_dead_letter_and_retry_exchanges():
     topology = make_topology()
     channel = FakeChannel()
 
@@ -57,6 +59,7 @@ def test_declare_creates_main_and_dead_letter_exchanges():
     assert channel.exchanges == [
         ("dnd.events", ExchangeType.TOPIC, True),
         ("dnd.events.dlx", ExchangeType.FANOUT, True),
+        ("dnd.events.retryx", ExchangeType.DIRECT, True),
     ]
 
 
@@ -75,3 +78,18 @@ def test_declare_queue_creates_dlq_bound_to_dead_letter_exchange():
     assert channel.queues["backend.updates.dlq"].bindings == [
         ("dnd.events.dlx", "")
     ]
+
+
+def test_declare_queue_creates_retry_queue_with_backoff_to_main_queue():
+    topology = make_topology()
+    channel = FakeChannel()
+
+    asyncio.run(topology.declare_queue(channel, "backend.updates"))
+
+    retry = channel.queues["backend.updates.retry"]
+    assert retry.durable is True
+    assert retry.arguments == {
+        "x-message-ttl": 5000,
+        "x-dead-letter-exchange": "dnd.events",
+    }
+    assert retry.bindings == [("dnd.events.retryx", "backend.updates")]

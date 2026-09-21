@@ -63,6 +63,8 @@ def get_message_bus() -> MessageBus:
             exchange_name=settings.RABBITMQ_EXCHANGE,
             queue_prefix=settings.RABBITMQ_QUEUE_PREFIX,
             exchange_type=settings.RABBITMQ_EXCHANGE_TYPE,
+            retry_delay_seconds=settings.RABBITMQ_RETRY_DELAY_SECONDS,
         ),
         prefetch_count=settings.RABBITMQ_PREFETCH_COUNT,
+        max_retries=settings.RABBITMQ_MAX_RETRIES,
     )
