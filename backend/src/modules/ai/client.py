@@ -1,4 +1,4 @@
-from src.exceptions import ServiceError
+from src.utils.exceptions import ServiceError
 
 
 class AIGateway:

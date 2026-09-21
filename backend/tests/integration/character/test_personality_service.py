@@ -5,7 +5,7 @@ CHAR_ID = uuid.uuid4()
 
 import pytest
 
-from src.exceptions import ServiceError
+from src.utils.exceptions import ServiceError
 from src.modules.character.models import Character, Personality
 from src.modules.character.personality.schemas import PersonalityCreateSchema
 from src.modules.character.personality.service import PersonalityService

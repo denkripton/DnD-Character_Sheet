@@ -6,7 +6,7 @@ CHAR_ID = uuid.uuid4()
 import pytest
 from pydantic import ValidationError
 
-from src.exceptions import ServiceError
+from src.utils.exceptions import ServiceError
 from src.modules.character.backstory.schemas import BackstoryCreateSchema
 from src.modules.character.backstory.service import BackstoryService
 from src.modules.character.models import (

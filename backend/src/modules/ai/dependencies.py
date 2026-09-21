@@ -1,7 +1,7 @@
 from fastapi import Depends
 
 from src.config import settings
-from src.exceptions import ServiceError
+from src.utils.exceptions import ServiceError
 from src.modules.ai.client import AIGateway
 from src.modules.ai.gateway import GeminiGateway
 from src.modules.ai.models import MODEL_PROVIDER, get_default_model

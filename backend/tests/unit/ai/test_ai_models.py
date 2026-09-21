@@ -3,7 +3,7 @@ import asyncio
 import pytest
 
 from src.config import settings
-from src.exceptions import ServiceError
+from src.utils.exceptions import ServiceError
 from src.modules.ai import AIGateway
 from src.modules.ai.models import (
     AVAILABLE_MODELS,

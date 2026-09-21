@@ -1,4 +1,4 @@
-from src.exceptions import ServiceError
+from src.utils.exceptions import ServiceError
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.repositories import SkillRepository
 from src.modules.character.skills.schemas import (

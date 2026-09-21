@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from src.exceptions import ServiceError
+from src.utils.exceptions import ServiceError
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from tests.utils import FakeRepo
 

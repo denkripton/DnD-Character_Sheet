@@ -6,7 +6,7 @@ CHAR_ID = uuid.uuid4()
 import pytest
 from pydantic import ValidationError
 
-from src.exceptions import ServiceError
+from src.utils.exceptions import ServiceError
 from src.modules.character.features.schemas import FeatureCreateSchema
 from src.modules.character.features.service import FeatureService
 from src.modules.character.models import Character, Feature

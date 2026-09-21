@@ -1,7 +1,9 @@
-from src.exceptions import ServiceError
+from src.config import settings
+from src.utils.exceptions import RateLimitExceeded, ServiceError
 from src.infrastructure.redis import cache
 from src.utils.unit_of_work import UnitOfWork
 from src.modules.auth.repository import UserRepository
+from src.modules.character.base.enums.generation_limits import GenerationLimits
 from src.modules.character.base.schemas import (
     CharacterCreateSchema,
     CharacterReadSchema,
@@ -15,6 +17,7 @@ from src.modules.character.repositories import (
 )
 from src.modules.character.utils.hit_points import recalculate_combat_hit_dice
 from src.modules.character.utils.random_character import generate_random_character
+from src.utils.interfaces.rate_limiter import RateLimiter
 
 
 class CharacterService:
@@ -26,6 +29,7 @@ class CharacterService:
         combat_repository: CombatRepository,
         stats_repository: StatsRepository,
         unit_of_work: UnitOfWork,
+        rate_limiter: RateLimiter,
     ):
         self.character_repo = character_repository
         self.user_repo = user_repository
@@ -33,8 +37,25 @@ class CharacterService:
         self.combat_repo = combat_repository
         self.stats_repo = stats_repository
         self.uow = unit_of_work
+        self.rate_limiter = rate_limiter
+
+    async def _enforce_creation_limit(self, user_id: str) -> None:
+        result = await self.rate_limiter.is_limited(
+            user_id=user_id,
+            category=GenerationLimits.KEY_PREFIX.value,
+            max_requests=settings.CHARACTER_GENERATION_DAILY_LIMIT,
+            time_window=GenerationLimits.DAILY_WINDOW_SECONDS.value,
+        )
+        if not result.allowed:
+            raise RateLimitExceeded(
+                limit=result.max_allowed,
+                used=result.current_usage,
+                retry_after=result.retry_after,
+            )
 
     async def character_creation(self, user_id, data: CharacterCreateSchema):
+        await self._enforce_creation_limit(user_id)
+
         data = data.model_dump()
 
         existing_user = await self.user_repo.get_by_id(user_id)

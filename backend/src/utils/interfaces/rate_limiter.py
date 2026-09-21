@@ -5,5 +5,7 @@ from src.infrastructure.redis.enums import RateLimitResult
 
 class RateLimiter(ABC):
     @abstractmethod
-    async def hit(self, key: str, limit: int, window_seconds: int) -> RateLimitResult:
+    async def is_limited(
+        self, user_id: str, category: str, max_requests: int, time_window: int
+    ) -> RateLimitResult:
         raise NotImplementedError("Method must be redefined")

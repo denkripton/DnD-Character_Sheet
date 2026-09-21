@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from src.exceptions import ServiceError
+from src.utils.exceptions import ServiceError
 from src.modules.auth.models import User
 from src.modules.auth.schemas.user.creation import UserCreateSchema
 from src.modules.auth.schemas.user.login import UserLoginSchema

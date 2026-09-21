@@ -1,4 +1,4 @@
-from src.exceptions import ServiceError
+from src.utils.exceptions import ServiceError
 from src.modules.ai import AIGateway
 from src.modules.character.backstory.prompt import build_backstory_prompt
 from src.modules.character.backstory.schemas import (

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from src.databases.sql import Base
-from src.exceptions import ServiceError
+from src.utils.exceptions import ServiceError
 from src.modules.auth.models import User
 from src.modules.auth.repository import UserRepository
 from src.modules.auth.schemas.user.creation import UserCreateSchema
@@ -34,6 +34,7 @@ from src.utils.unit_of_work import UnitOfWork
 from tests.utils import (
     FakeRepo,
     FakeUnitOfWork,
+    StubRateLimiter,
     build_guard,
     build_owned_character,
 )
@@ -128,6 +129,7 @@ def _build_character_service(session):
         combat_repository=combat_repo,
         stats_repository=stats_repo,
         unit_of_work=uow,
+        rate_limiter=StubRateLimiter(),
     )
     return service, user_repo, char_repo
 

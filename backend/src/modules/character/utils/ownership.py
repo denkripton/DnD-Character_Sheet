@@ -1,6 +1,6 @@
 from typing import Any
 
-from src.exceptions import ServiceError
+from src.utils.exceptions import ServiceError
 from src.modules.auth.repository import UserRepository
 from src.modules.character.repositories import CharacterRepository
 

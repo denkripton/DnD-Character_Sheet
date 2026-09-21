@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from src.exceptions import ServiceError
+from src.utils.exceptions import ServiceError
 from src.config import logger
 
 

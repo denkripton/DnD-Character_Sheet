@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     REDIS_MAX_CONNECTIONS: int | None = None
     REDIS_HEALTH_CHECK_INTERVAL: int = 30
 
+    CHARACTER_GENERATION_DAILY_LIMIT: int = 5
+
     RABBITMQ_URL: str
     RABBITMQ_EXCHANGE: str
     RABBITMQ_QUEUE_PREFIX: str

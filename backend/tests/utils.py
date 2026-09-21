@@ -3,6 +3,29 @@ import uuid
 
 from src.modules.character.models import Character
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
+from src.utils.interfaces.rate_limiter import RateLimitResult
+
+
+class StubRateLimiter:
+    def __init__(self, allowed: bool = True):
+        self.allowed = allowed
+
+    async def is_limited(self, user_id, category, max_requests, time_window):
+        if self.allowed:
+            return RateLimitResult(
+                allowed=True,
+                current_usage=0,
+                max_allowed=max_requests,
+                remaining=max_requests,
+                retry_after=0,
+            )
+        return RateLimitResult(
+            allowed=False,
+            current_usage=max_requests,
+            max_allowed=max_requests,
+            remaining=0,
+            retry_after=time_window,
+        )
 
 
 class FakeRedis:
@@ -16,8 +39,27 @@ class FakeRedis:
         if self.fail:
             raise ConnectionError("redis is unavailable")
 
+    def _is_alive(self, key):
+        ttl = self.expirations.get(key)
+        if ttl is not None and ttl <= 0:
+            self.store.pop(key, None)
+            self.expirations.pop(key, None)
+            return False
+        return True
+
+    def advance(self, seconds):
+        for key in list(self.expirations):
+            remaining = self.expirations[key] - seconds
+            if remaining <= 0:
+                self.store.pop(key, None)
+                self.expirations.pop(key, None)
+            else:
+                self.expirations[key] = remaining
+
     async def get(self, key):
         self._check()
+        if not self._is_alive(key):
+            return None
         return self.store.get(key)
 
     async def set(self, key, value, ex=None, **kwargs):
@@ -35,10 +77,11 @@ class FakeRedis:
 
     async def exists(self, key):
         self._check()
-        return 1 if key in self.store else 0
+        return 1 if self._is_alive(key) and key in self.store else 0
 
     async def incr(self, key):
         self._check()
+        self._is_alive(key)
         value = int(self.store.get(key, 0)) + 1
         self.store[key] = value
         return value
@@ -50,7 +93,57 @@ class FakeRedis:
 
     async def ttl(self, key):
         self._check()
+        self._is_alive(key)
+        if key not in self.store:
+            return -2
         return self.expirations.get(key, -1)
+
+    def _zstore(self, key):
+        if key not in self.store:
+            self.store[key] = {}
+        if not isinstance(self.store[key], dict):
+            raise TypeError("WRONGTYPE Operation against a key holding the wrong kind of value")
+        return self.store[key]
+
+    async def zcard(self, key):
+        self._check()
+        self._is_alive(key)
+        zs = self.store.get(key)
+        return len(zs) if isinstance(zs, dict) else 0
+
+    async def zadd(self, key, mapping):
+        self._check()
+        self._is_alive(key)
+        zs = self._zstore(key)
+        added = 0
+        for member, score in mapping.items():
+            if member not in zs:
+                added += 1
+            zs[member] = float(score)
+        return added
+
+    async def zremrangebyscore(self, name, min, max):
+        self._check()
+        self._is_alive(name)
+        zs = self.store.get(name)
+        if not isinstance(zs, dict):
+            return 0
+        removed = [member for member, score in zs.items() if min <= score <= max]
+        for member in removed:
+            del zs[member]
+        return len(removed)
+
+    async def zrange(self, key, start, end, withscores=True):
+        self._check()
+        self._is_alive(key)
+        items = sorted(self.store.get(key, {}).items(), key=lambda item: item[1])
+        found = items[start : end + 1]
+        if withscores:
+            return [(member, float(score)) for member, score in found]
+        return [member for member, _ in found]
+
+    def pipeline(self):
+        return FakePipeline(self)
 
     async def scan_iter(self, match=None, **kwargs):
         self._check()
@@ -64,6 +157,60 @@ class FakeRedis:
 
     async def aclose(self):
         self.closed = True
+
+
+class FakePipeline:
+    def __init__(self, redis):
+        self._redis = redis
+        self._commands = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    def zremrangebyscore(self, name, min, max):
+        self._commands.append(("zremrangebyscore", name, min, max))
+        return self
+
+    def zcard(self, name):
+        self._commands.append(("zcard", name))
+        return self
+
+    def zadd(self, name, mapping):
+        self._commands.append(("zadd", name, mapping))
+        return self
+
+    def expire(self, name, seconds):
+        self._commands.append(("expire", name, seconds))
+        return self
+
+    def zrange(self, name, start, end, withscores=True):
+        self._commands.append(("zrange", name, start, end, withscores))
+        return self
+
+    async def execute(self):
+        results = []
+        for command in self._commands:
+            op = command[0]
+            if op == "zremrangebyscore":
+                results.append(
+                    await self._redis.zremrangebyscore(command[1], command[2], command[3])
+                )
+            elif op == "zcard":
+                results.append(await self._redis.zcard(command[1]))
+            elif op == "zadd":
+                results.append(await self._redis.zadd(command[1], command[2]))
+            elif op == "expire":
+                results.append(await self._redis.expire(command[1], command[2]))
+            elif op == "zrange":
+                results.append(
+                    await self._redis.zrange(
+                        command[1], command[2], command[3], withscores=command[4]
+                    )
+                )
+        return results
 
 
 class FakeSession:

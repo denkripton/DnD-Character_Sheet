@@ -1,4 +1,4 @@
-from src.exceptions import ServiceError
+from src.utils.exceptions import ServiceError
 from src.modules.character.features.schemas import (
     FeatureCreateSchema,
     FeatureReadSchema,

@@ -6,7 +6,7 @@ CHAR_ID = uuid.uuid4()
 import pytest
 from pydantic import ValidationError
 
-from src.exceptions import ServiceError
+from src.utils.exceptions import ServiceError
 from src.modules.character.base.schemas import CharacterUpdateSchema
 from src.modules.character.base.service import CharacterService
 from src.modules.character.combat.schemas import CombatCreateSchema
@@ -15,7 +15,7 @@ from src.modules.character.models import Character, Combat, Stat
 from src.modules.character.stats.schemas import StatsCreateSchema
 from src.modules.character.stats.service import StatsService
 from src.modules.character.utils.enums.stats import Stats
-from tests.utils import FakeRepo, FakeUnitOfWork, build_guard
+from tests.utils import FakeRepo, FakeUnitOfWork, StubRateLimiter, build_guard
 
 
 class DummyUser:
@@ -48,6 +48,7 @@ def _build(char_id=CHAR_ID):
         combat_repository=combat_repo,
         stats_repository=stats_repo,
         unit_of_work=uow,
+        rate_limiter=StubRateLimiter(),
     )
     stats = StatsService(
         ownership_guard=guard,
