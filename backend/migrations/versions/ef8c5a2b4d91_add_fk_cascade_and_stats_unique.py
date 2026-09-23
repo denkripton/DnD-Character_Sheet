@@ -25,11 +25,10 @@ def _fk_name(table: str) -> str:
 
 
 def upgrade() -> None:
-    # Remove duplicate stats rows created by the pre-constraint race so the
-    # new unique constraint can be applied (keep the earliest row per character).
     op.execute(
         "DELETE FROM stats WHERE id NOT IN "
-        "(SELECT MIN(id) FROM stats GROUP BY character_id)"
+        "(SELECT DISTINCT ON (character_id) id FROM stats "
+        "ORDER BY character_id, created_at, id)"
     )
 
     # stats.character_id was the only 1:1 FK without a unique constraint.
@@ -37,9 +36,6 @@ def upgrade() -> None:
         "ALTER TABLE stats ADD CONSTRAINT uq_stats_character_id "
         "UNIQUE (character_id)"
     )
-
-    # Rebuild every child FK with ON DELETE CASCADE so a single DELETE on
-    # characters cleans up all children instead of the ORM loading them.
     for table in CHILD_TABLES:
         op.execute(f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {_fk_name(table)}")
         op.execute(
