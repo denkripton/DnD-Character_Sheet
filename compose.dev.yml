@@ -20,6 +20,21 @@ services:
       - "8000"
       - --reload
 
+  bot:
+    build:
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    volumes:
+      - ./bot:/app/bot:z
+      - ./backend:/app/backend:z
+    environment:
+      ENVIRONMENT: development
+    command:
+      - python
+      - -m
+      - app.main
+
   db:
     ports:
       - "5433:5432"

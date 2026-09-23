@@ -1,0 +1,18 @@
+[project]
+name = "bot"
+version = "0.2.0"
+description = "Telegram bot acting as the interface layer for the D&D character sheet manager"
+requires-python = ">=3.13"
+dependencies = [
+    "aiogram>=3.20",
+    "aio-pika>=9.5",
+    "pydantic-settings>=2.13.1",
+    "pydantic>=2.13.1",
+    "redis>=5.0",
+    "structlog>=25.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+]

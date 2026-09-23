@@ -4,10 +4,10 @@ version = "0.2.0"
 requires-python = ">=3.13"
 
 [tool.uv.workspace]
-members = ["backend"]
+members = ["backend", "bot"]
 
 [tool.uv.sources]
 
 [tool.pytest.ini_options]
-pythonpath = ["backend"]
-testpaths = ["backend/tests"]
+pythonpath = ["backend", "bot"]
+testpaths = ["backend/tests", "bot/tests"]
