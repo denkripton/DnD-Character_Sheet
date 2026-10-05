@@ -13,6 +13,9 @@ class Settings(BaseSettings):
 
     JWT_SECRET_KEY: str
 
+    BOT_API_SECRET: str
+    BOT_MESSAGE_MAX_AGE_SECONDS: int = 300
+
     GEMINI_API_KEY: str
     DEFAULT_AI_MODEL: str
 

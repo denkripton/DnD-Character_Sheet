@@ -11,6 +11,7 @@ def test_create_dispatcher_uses_memory_storage():
     assert isinstance(dispatcher.storage, MemoryStorage)
     assert dispatcher["config"] is not None
     assert dispatcher["start_service"] is not None
+    assert dispatcher["auth_service"] is not None
 
 
 def test_create_dispatcher_redis_storage():
@@ -24,6 +25,7 @@ def test_create_dispatcher_registers_start_router():
     dispatcher = create_dispatcher(BotConfig(BOT_TOKEN="12345:test-token"))
     assert "config" in dispatcher.workflow_data
     assert "start_service" in dispatcher.workflow_data
+    assert "auth_service" in dispatcher.workflow_data
 
 
 def test_create_bot_token():

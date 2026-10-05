@@ -1,0 +1,2 @@
+class BackendAuthError(Exception):
+    pass

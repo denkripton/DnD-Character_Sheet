@@ -9,6 +9,10 @@ class BotConfig(BaseSettings):
     BOT_RABBITMQ_QUEUE_PREFIX: str = "bot"
     BOT_FSM_STORAGE: Literal["memory", "redis"] = "memory"
 
+    BACKEND_BASE_URL: str = "http://backend:8000"
+    BOT_API_SECRET: str = ""
+    BOT_MESSAGE_MAX_AGE_SECONDS: int = 300
+
     LOG_LEVEL: str = "INFO"
 
     RABBITMQ_URL: str = "amqp://backend:backend@rabbitmq:5672/"

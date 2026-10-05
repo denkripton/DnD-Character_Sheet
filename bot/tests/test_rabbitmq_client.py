@@ -9,7 +9,15 @@ from app.messaging import (
     MessageType,
     create_message,
 )
+from src.infrastructure.rabbitmq.serialization import serialize
+from src.infrastructure.rabbitmq.utils import envelope_to_properties, to_envelope
 from src.messaging.contract import messaging_route
+from src.messaging.enums.constants.command_headers import (
+    AUTH_PROVIDER_HEADER,
+    AUTH_PROVIDER_USER_ID_HEADER,
+    AUTH_USER_ID_HEADER,
+)
+from src.messaging.security import sign_command, verify_command
 
 
 class FakeBus:
@@ -74,10 +82,83 @@ def test_publish_command_builds_envelope():
 
 def test_publish_command_uses_headers():
     bus = FakeBus()
-    client = BotRabbitMQClient(_config(), bus=bus)
-    asyncio.run(client.publish_command(MessageType.CHARACTER_GET, headers={"source": "telegram"}))
+    client = BotRabbitMQClient(_config(BOT_API_SECRET=""), bus=bus)
+    asyncio.run(
+        client.publish_command(MessageType.CHARACTER_GET, headers={"source": "telegram"})
+    )
     (envelope, _), = bus.published
     assert envelope.headers == {"source": "telegram"}
+
+
+def test_publish_command_with_identity_headers():
+    bus = FakeBus()
+    client = BotRabbitMQClient(_config(), bus=bus)
+    asyncio.run(
+        client.publish_command(
+            MessageType.CHARACTER_GENERATE,
+            {"user_id": 7},
+            provider="telegram",
+            provider_user_id="123",
+            user_id="user-1",
+        ),
+    )
+    (envelope, _), = bus.published
+    assert envelope.headers[AUTH_PROVIDER_HEADER] == "telegram"
+    assert envelope.headers[AUTH_PROVIDER_USER_ID_HEADER] == "123"
+    assert envelope.headers[AUTH_USER_ID_HEADER] == "user-1"
+
+
+def test_publish_command_signs_when_secret_configured():
+    bus = FakeBus()
+    client = BotRabbitMQClient(_config(BOT_API_SECRET="shared-secret"), bus=bus)
+    asyncio.run(
+        client.publish_command(
+            MessageType.CHARACTER_GENERATE,
+            {"user_id": 7},
+            provider="telegram",
+            provider_user_id="123",
+            user_id="user-1",
+        ),
+    )
+    (envelope, _), = bus.published
+    verify_command(envelope, "shared-secret")
+
+
+def test_publish_command_unsigned_when_secret_missing():
+    bus = FakeBus()
+    client = BotRabbitMQClient(_config(BOT_API_SECRET=""), bus=bus)
+    asyncio.run(
+        client.publish_command(
+            MessageType.CHARACTER_GENERATE,
+            {"user_id": 7},
+            provider="telegram",
+            provider_user_id="123",
+            user_id="user-1",
+        ),
+    )
+    (envelope, _), = bus.published
+    assert "x-command-signature" not in envelope.headers
+
+
+def test_signed_command_round_trip_through_amqp_properties():
+    producer_envelope = create_message(
+        MessageType.CHARACTER_GENERATE,
+        {"user_id": 7},
+        headers={
+            AUTH_PROVIDER_HEADER: "telegram",
+            AUTH_PROVIDER_USER_ID_HEADER: "123",
+            AUTH_USER_ID_HEADER: "user-1",
+        },
+    )
+    secret = "shared-secret"
+    properties = envelope_to_properties(sign_command(producer_envelope, secret))
+    truncted = properties._replace(timestamp=properties.timestamp.replace(microsecond=0))
+    delivered = to_envelope(
+        serialize(producer_envelope),
+        truncted,
+    )
+
+    verify_command(delivered, secret)
 
 
 def test_close_leaves_injected_bus_open():

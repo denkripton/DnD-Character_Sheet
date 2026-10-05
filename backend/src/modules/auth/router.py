@@ -1,17 +1,20 @@
 from fastapi import APIRouter, Depends, Response
-
 from src.modules.auth import get_user_service
-
-from src.modules.auth.service import UserService
-from src.utils import ErrorHandlingRoute
-
+from src.modules.auth.dependencies import (
+    get_external_auth_service,
+    require_bot_secret,
+)
+from src.modules.auth.external_service import ExternalAuthService
 from src.modules.auth.schemas.auth.read import AuthReadSchema
 from src.modules.auth.schemas.exceptions.password_403 import Password403
 from src.modules.auth.schemas.exceptions.user_422 import User422
+from src.modules.auth.schemas.external_auth.read import ExternalAuthSchema
+from src.modules.auth.schemas.external_auth.request import ExternalAuthRequestSchema
 from src.modules.auth.schemas.user.creation import UserCreateSchema
 from src.modules.auth.schemas.user.login import UserLoginSchema
 from src.modules.auth.schemas.user.read import UserRead
-
+from src.modules.auth.service import UserService
+from src.utils import ErrorHandlingRoute
 
 user_router = APIRouter(prefix="/users", route_class=ErrorHandlingRoute)
 
@@ -61,3 +64,26 @@ async def login_user(
     )
 
     return user
+
+
+@user_router.post(
+    "/auth/external",
+    summary="External authentication",
+    tags=["Authentication"],
+    description="Authenticate a user through a trusted external service",
+    response_model=ExternalAuthSchema,
+    dependencies=[Depends(require_bot_secret)],
+)
+async def authenticate_external(
+    data: ExternalAuthRequestSchema,
+    service: ExternalAuthService = Depends(get_external_auth_service),
+):
+    result = await service.authenticate_external(
+        provider=data.provider,
+        provider_user_id=data.provider_user_id,
+    )
+    return ExternalAuthSchema(
+        access=result["access"],
+        refresh=result["refresh"],
+        user=result["user"],
+    )

@@ -5,7 +5,9 @@ from aiogram.fsm.storage.base import BaseStorage
 
 from app.config import BotConfig
 from app.infrastructure.fsm.storage import create_fsm_storage
+from app.infrastructure.http.client import BackendApiClient
 from app.middlewares.logging import LoggingMiddleware
+from app.modules.auth import BotAuthService
 from app.modules.start.router import build_start_router
 from app.modules.start.service import StartService
 
@@ -26,4 +28,5 @@ def create_dispatcher(
     dispatcher.include_router(build_start_router())
     dispatcher["config"] = config
     dispatcher["start_service"] = StartService()
+    dispatcher["auth_service"] = BotAuthService(BackendApiClient(config))
     return dispatcher

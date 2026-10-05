@@ -32,7 +32,11 @@ async def lifespan(app: FastAPI):
     app.state.message_bus = bus
 
     command_queue = f"{settings.RABBITMQ_QUEUE_PREFIX}.{BOT_COMMAND_QUEUE}"
-    command_dispatcher = build_bot_command_dispatcher(bus)
+    command_dispatcher = build_bot_command_dispatcher(
+        bus,
+        secret=settings.BOT_API_SECRET,
+        max_age_seconds=settings.BOT_MESSAGE_MAX_AGE_SECONDS,
+    )
     await bus.subscribe(
         command_queue,
         [ROUTING_KEY_ALL_COMMANDS],
