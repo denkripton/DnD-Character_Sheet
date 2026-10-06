@@ -210,3 +210,52 @@ def test_stats_transport_failure_raises_backend_unavailable():
 
     with pytest.raises(BackendUnavailableError):
         asyncio.run(service.generate_stats(AUTH, "d1", "standard"))
+
+
+def test_generate_character_sends_generate_command_with_identity():
+    service, rabbit = _service(
+        payload={
+            "ok": True,
+            "draft": {"id": "d1", "data": {"name": "Lyra"}},
+            "stats": {"strength": 13},
+            "modifiers": {"strength": 1},
+        }
+    )
+
+    result = asyncio.run(service.generate_character(AUTH, "d1", "standard"))
+
+    assert result == {
+        "draft": {"id": "d1", "data": {"name": "Lyra"}},
+        "stats": {"strength": 13},
+        "modifiers": {"strength": 1},
+    }
+    call = rabbit.calls[0]
+    assert call["message_type"] == MessageType.CHARACTER_GENERATE
+    assert call["payload"] == {"draft_id": "d1", "method": "standard"}
+    assert call["kwargs"]["provider"] == "telegram"
+    assert call["kwargs"]["provider_user_id"] == "7"
+    assert call["kwargs"]["user_id"] == "user-1"
+
+
+def test_generate_character_backend_rejection_raises_character_creation_error():
+    service, _ = _service(
+        payload={"ok": False, "error": "Daily limit reached: 5/5"}
+    )
+
+    with pytest.raises(CharacterCreationError) as exc_info:
+        asyncio.run(service.generate_character(AUTH, "d1", "random"))
+    assert str(exc_info.value) == "Daily limit reached: 5/5"
+
+
+def test_generate_character_response_without_draft_raises():
+    service, _ = _service(payload={"ok": True, "stats": {}})
+
+    with pytest.raises(CharacterCreationError):
+        asyncio.run(service.generate_character(AUTH, "d1", "random"))
+
+
+def test_generate_character_transport_failure_raises_backend_unavailable():
+    service, _ = _service(error=ConnectionError("broker down"))
+
+    with pytest.raises(BackendUnavailableError):
+        asyncio.run(service.generate_character(AUTH, "d1", "standard"))

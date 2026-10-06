@@ -41,3 +41,23 @@ CHARACTER_STATS_FORMAT_TEXT = (
 CHARACTER_STATS_NONE_TEXT = (
     "Ability scores are not set yet. Generate or enter them first."
 )
+CHARACTER_GENERATION_MODE_TEXT = (
+    "How would you like to create your character?\n"
+    "🎲 Generate a full character - the server creates everything for you.\n"
+    "✏️ Create step by step - pick or enter each value yourself."
+)
+CHARACTER_GENERATION_METHOD_TEXT = (
+    "Choose the ability score method for your generated character.\n"
+    "Manual entry is available in step-by-step creation."
+)
+CHARACTER_GENERATION_HINT_TEXT = (
+    "Use the buttons above, or /cancel to discard the draft."
+)
+CHARACTER_GENERATION_RESULT_TEXT = (
+    "Your character has been generated:\n"
+    "Name: {name}\n"
+    "Race: {kind}\n"
+    "Class: {spec_class}\n"
+    "Alignment: {alignment}\n"
+    "Background: {background}"
+)

@@ -6,7 +6,7 @@ from src.modules.character.draft.service import CharacterDraftService
 from src.modules.character.models import CharacterDraft
 from src.modules.character.utils.random_character import KINDS, NAMES, SPEC_CLASSES
 from src.utils.exceptions import ServiceError
-from tests.utils import FakeRepo, FakeUnitOfWork
+from tests.utils import FakeRepo, FakeUnitOfWork, StubRateLimiter
 
 
 class DummyUser:
@@ -14,7 +14,7 @@ class DummyUser:
         self.id = id
 
 
-def _service():
+def _service(rate_limiter=None):
     user_repo = FakeRepo(model=DummyUser)
     user_repo.rows.append(DummyUser("user-1"))
     user_repo.rows.append(DummyUser("user-2"))
@@ -24,6 +24,7 @@ def _service():
         draft_repository=draft_repo,
         user_repository=user_repo,
         unit_of_work=uow,
+        rate_limiter=rate_limiter or StubRateLimiter(allowed=True),
     )
     return service, draft_repo, uow
 

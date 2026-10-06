@@ -41,6 +41,21 @@ class CharacterCreationService:
         )
         return self._extract_draft(payload)
 
+    async def generate_character(
+        self, auth: dict, draft_id: str, method: str
+    ) -> dict:
+        payload = await self._request(
+            MessageType.CHARACTER_GENERATE,
+            {"draft_id": draft_id, "method": method},
+            auth,
+        )
+        draft = self._extract_draft(payload)
+        return {
+            "draft": draft,
+            "stats": payload.get("stats"),
+            "modifiers": payload.get("modifiers"),
+        }
+
     async def generate_stats(
         self, auth: dict, draft_id: str, method: str
     ) -> dict:

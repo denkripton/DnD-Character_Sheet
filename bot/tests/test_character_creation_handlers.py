@@ -7,7 +7,13 @@ from app.modules.character.keyboards import (
     CALLBACK_CANCEL,
     CALLBACK_CONFIRM,
     CALLBACK_EDIT,
+    CALLBACK_FULL_EDIT,
+    CALLBACK_FULL_METHOD,
+    CALLBACK_FULL_REGEN,
+    CALLBACK_GEN_FULL,
+    CALLBACK_GEN_STEP,
     CALLBACK_REGEN,
+    generation_method_keyboard,
     stats_method_keyboard,
     step_keyboard,
 )
@@ -18,6 +24,7 @@ from app.modules.character.router import (
     handle_callback,
     handle_cancel,
     handle_create,
+    handle_generation_hint,
     handle_stats_input,
     handle_stats_method_input,
     handle_step_input,
@@ -41,6 +48,9 @@ from app.utils.constants import (
     CHARACTER_CANCELLED_TEXT,
     CHARACTER_EMPTY_INPUT_TEXT,
     CHARACTER_FIRST_STEP_TEXT,
+    CHARACTER_GENERATION_HINT_TEXT,
+    CHARACTER_GENERATION_METHOD_TEXT,
+    CHARACTER_GENERATION_MODE_TEXT,
     CHARACTER_IN_PROGRESS_TEXT,
     CHARACTER_NOT_STARTED_TEXT,
     CHARACTER_STALE_TEXT,
@@ -95,11 +105,14 @@ class FakeCreationService:
         self.cancelled = []
         self.stats_generated = []
         self.stats_set = []
+        self.characters_generated = []
         self.data = {}
         self.stats = None
+        self.modifiers = None
         self.draft_id = "draft-1"
         self.fail_with = None
         self.stats_sequence = 0
+        self.generation_sequence = 0
 
     def _maybe_fail(self):
         if self.fail_with is not None:
@@ -123,6 +136,36 @@ class FakeCreationService:
         value = f"generated-{parameter}"
         self.data[parameter] = value
         return {"id": draft_id, "data": dict(self.data)}
+
+    async def generate_character(self, auth, draft_id, method):
+        self._maybe_fail()
+        self.characters_generated.append((draft_id, method))
+        self.generation_sequence += 1
+        self.data.update(
+            {
+                "name": f"Hero-{self.generation_sequence}",
+                "kind": "Elf",
+                "spec_class": "Wizard",
+                "alignment": "True Neutral",
+                "background": "Sage",
+            }
+        )
+        self.stats = {
+            "strength": 13 + self.generation_sequence,
+            "dexterity": 12,
+            "constitution": 11,
+            "intelligence": 14,
+            "wisdom": 10,
+            "charisma": 9,
+        }
+        self.modifiers = {
+            key: (value - 10) // 2 for key, value in self.stats.items()
+        }
+        return {
+            "draft": {"id": draft_id, "data": dict(self.data)},
+            "stats": dict(self.stats),
+            "modifiers": dict(self.modifiers),
+        }
 
     @staticmethod
     def _stats_result(stats):
@@ -191,6 +234,8 @@ def _started_state(service, state=None):
     state = state or _state_with_auth()
     message = _message()
     asyncio.run(handle_create(message, state, service))
+    assert state.state == CharacterCreationStates.generation_mode.state
+    asyncio.run(handle_callback(_callback("cc:gen_step"), state, service))
     return state, message
 
 
@@ -200,10 +245,15 @@ def test_successful_sequential_flow():
 
     start_message = _message()
     asyncio.run(handle_create(start_message, state, service))
-    assert state.state == CharacterCreationStates.name.state
+    assert state.state == CharacterCreationStates.generation_mode.state
     assert state.data["draft_id"] == "draft-1"
     assert service.starts == 1
-    assert "Step 1/5" in _last_answer(start_message)
+    assert "How would you like to create" in _last_answer(start_message)
+
+    step_callback = _callback("cc:gen_step")
+    asyncio.run(handle_callback(step_callback, state, service))
+    assert state.state == CharacterCreationStates.name.state
+    assert "Step 1/5" in _last_answer(step_callback.message)
 
     name_message = _message("  Aria  ")
     asyncio.run(handle_step_input(name_message, state, service))
@@ -594,7 +644,7 @@ def test_name_step_keyboard_has_no_preset_options():
 def test_router_registers_expected_handlers():
     router = build_character_creation_router()
     assert router.name == "character_creation"
-    assert len(router.message.handlers) == 7
+    assert len(router.message.handlers) == 8
     assert len(router.callback_query.handlers) == 1
 
 
@@ -608,6 +658,7 @@ def _to_stats_method(service=None, state=None):
     service = service or FakeCreationService()
     state = state or _state_with_auth()
     asyncio.run(handle_create(_message(), state, service))
+    asyncio.run(handle_callback(_callback("cc:gen_step"), state, service))
     asyncio.run(handle_step_input(_message("Aria"), state, service))
     asyncio.run(handle_callback(_callback("cc:set:race:Elf"), state, service))
     asyncio.run(handle_callback(_callback("cc:set:spec_class:Wizard"), state, service))
@@ -834,7 +885,7 @@ def test_method_button_stale_outside_method_step():
     asyncio.run(handle_callback(callback, state, service))
 
     assert service.stats_generated == []
-    assert state.state == CharacterCreationStates.name.state
+    assert state.state == CharacterCreationStates.generation_mode.state
     callback.answer.assert_awaited_with(CHARACTER_STALE_TEXT, show_alert=True)
 
 
@@ -966,3 +1017,207 @@ def test_text_outside_stats_state_replies_not_started():
 
     assert service.stats_set == []
     assert _last_answer(message) == CHARACTER_NOT_STARTED_TEXT
+
+
+def _to_generation_method(service=None, state=None):
+    service = service or FakeCreationService()
+    state = state or _state_with_auth()
+    asyncio.run(handle_create(_message(), state, service))
+    asyncio.run(handle_callback(_callback(CALLBACK_GEN_FULL), state, service))
+    assert state.state == CharacterCreationStates.generation_method.state
+    return service, state
+
+
+def test_create_shows_generation_mode_choice():
+    service = FakeCreationService()
+    state = _state_with_auth()
+    message = _message()
+    asyncio.run(handle_create(message, state, service))
+
+    assert state.state == CharacterCreationStates.generation_mode.state
+    assert state.data["draft_id"] == "draft-1"
+    assert _last_answer(message) == CHARACTER_GENERATION_MODE_TEXT
+    keyboard = message.answer.call_args.kwargs["reply_markup"]
+    callback_data = [
+        button.callback_data for row in keyboard.inline_keyboard for button in row
+    ]
+    assert CALLBACK_GEN_FULL in callback_data
+    assert CALLBACK_GEN_STEP in callback_data
+
+
+def test_generation_method_keyboard_offers_generator_methods_only():
+    keyboard = generation_method_keyboard()
+    callback_data = [
+        button.callback_data for row in keyboard.inline_keyboard for button in row
+    ]
+    for method in ("random", "standard", "point_buy"):
+        assert f"{CALLBACK_FULL_METHOD}:{method}" in callback_data
+    assert f"{CALLBACK_FULL_METHOD}:manual" not in callback_data
+    assert CALLBACK_BACK in callback_data
+    assert CALLBACK_CANCEL in callback_data
+
+
+def test_full_generation_success_displays_character():
+    service, state = _to_generation_method()
+
+    callback = _callback(f"{CALLBACK_FULL_METHOD}:standard")
+    asyncio.run(handle_callback(callback, state, service))
+
+    assert service.characters_generated == [("draft-1", "standard")]
+    assert state.state == CharacterCreationStates.generation_result.state
+    text = _last_answer(callback.message)
+    assert "Your character has been generated:" in text
+    assert "Name: Hero-1" in text
+    assert "Race: Elf" in text
+    assert "Class: Wizard" in text
+    assert "STR 14 (+2)" in text
+    assert state.data["stats_method"] == "standard"
+    keyboard = callback.message.answer.call_args.kwargs["reply_markup"]
+    callback_data = [
+        button.callback_data for row in keyboard.inline_keyboard for button in row
+    ]
+    assert CALLBACK_FULL_REGEN in callback_data
+    assert CALLBACK_FULL_EDIT in callback_data
+    assert CALLBACK_CANCEL in callback_data
+
+
+def test_full_generation_rate_limit_shows_backend_error():
+    service, state = _to_generation_method()
+    service.fail_with = CharacterCreationError("Daily limit reached: 5/5")
+
+    callback = _callback(f"{CALLBACK_FULL_METHOD}:standard")
+    asyncio.run(handle_callback(callback, state, service))
+
+    assert service.characters_generated == []
+    assert state.state == CharacterCreationStates.generation_method.state
+    assert _last_answer(callback.message) == "Daily limit reached: 5/5"
+
+
+def test_full_generation_backend_failure_shows_unavailable():
+    service, state = _to_generation_method()
+    service.fail_with = BackendUnavailableError("broker down")
+
+    callback = _callback(f"{CALLBACK_FULL_METHOD}:standard")
+    asyncio.run(handle_callback(callback, state, service))
+
+    assert service.characters_generated == []
+    assert state.state == CharacterCreationStates.generation_method.state
+    assert _last_answer(callback.message) == CHARACTER_UNAVAILABLE_TEXT
+
+
+def test_full_regeneration_requests_new_character():
+    service, state = _to_generation_method()
+    asyncio.run(handle_callback(_callback(f"{CALLBACK_FULL_METHOD}:standard"), state, service))
+
+    callback = _callback(CALLBACK_FULL_REGEN)
+    asyncio.run(handle_callback(callback, state, service))
+
+    assert service.characters_generated == [
+        ("draft-1", "standard"),
+        ("draft-1", "standard"),
+    ]
+    assert state.state == CharacterCreationStates.generation_result.state
+    assert "Name: Hero-2" in _last_answer(callback.message)
+
+
+def test_full_regeneration_stale_outside_result_state():
+    service, state = _to_generation_method()
+
+    callback = _callback(CALLBACK_FULL_REGEN)
+    asyncio.run(handle_callback(callback, state, service))
+
+    assert service.characters_generated == []
+    callback.answer.assert_awaited_with(CHARACTER_STALE_TEXT, show_alert=True)
+
+
+def test_full_edit_jumps_to_wizard_with_generated_values():
+    service, state = _to_generation_method()
+    asyncio.run(handle_callback(_callback(f"{CALLBACK_FULL_METHOD}:standard"), state, service))
+
+    callback = _callback(CALLBACK_FULL_EDIT)
+    asyncio.run(handle_callback(callback, state, service))
+
+    assert state.state == CharacterCreationStates.name.state
+    assert state.data["edit_from_generation"] is True
+    assert "Step 1/5" in _last_answer(callback.message)
+
+
+def test_back_from_generation_method_returns_to_mode():
+    _, state = _to_generation_method()
+
+    message = _message("/back")
+    asyncio.run(handle_back(message, state))
+
+    assert state.state == CharacterCreationStates.generation_mode.state
+    assert _last_answer(message) == CHARACTER_GENERATION_MODE_TEXT
+
+
+def test_back_from_generation_result_returns_to_method():
+    service, state = _to_generation_method()
+    asyncio.run(handle_callback(_callback(f"{CALLBACK_FULL_METHOD}:standard"), state, service))
+
+    message = _message("/back")
+    asyncio.run(handle_back(message, state))
+
+    assert state.state == CharacterCreationStates.generation_method.state
+    assert _last_answer(message) == CHARACTER_GENERATION_METHOD_TEXT
+
+
+def test_back_from_edit_returns_to_generation_result():
+    service, state = _to_generation_method()
+    asyncio.run(handle_callback(_callback(f"{CALLBACK_FULL_METHOD}:standard"), state, service))
+    asyncio.run(handle_callback(_callback(CALLBACK_FULL_EDIT), state, service))
+
+    message = _message("/back")
+    asyncio.run(handle_back(message, state))
+
+    assert state.state == CharacterCreationStates.generation_result.state
+    assert "Your character has been generated:" in _last_answer(message)
+
+
+def test_step_by_step_callback_starts_wizard():
+    service = FakeCreationService()
+    state = _state_with_auth()
+    asyncio.run(handle_create(_message(), state, service))
+
+    callback = _callback(CALLBACK_GEN_STEP)
+    asyncio.run(handle_callback(callback, state, service))
+
+    assert state.state == CharacterCreationStates.name.state
+    assert "Step 1/5" in _last_answer(callback.message)
+
+
+def test_free_text_in_generation_states_shows_hint():
+    for state_value in (
+        CharacterCreationStates.generation_mode.state,
+        CharacterCreationStates.generation_method.state,
+        CharacterCreationStates.generation_result.state,
+    ):
+        state = FakeState(
+            data={"auth": dict(AUTH), "draft_id": "draft-1"},
+            state=state_value,
+        )
+        message = _message("hello")
+        asyncio.run(handle_generation_hint(message, state))
+        assert _last_answer(message) == CHARACTER_GENERATION_HINT_TEXT
+
+
+def test_generation_callbacks_stale_without_draft():
+    service = FakeCreationService()
+    state = FakeState(data={"auth": dict(AUTH)})
+
+    for raw in (
+        CALLBACK_GEN_FULL,
+        CALLBACK_GEN_STEP,
+        f"{CALLBACK_FULL_METHOD}:standard",
+        CALLBACK_FULL_REGEN,
+        CALLBACK_FULL_EDIT,
+    ):
+        callback = _callback(raw)
+        asyncio.run(handle_callback(callback, state, service))
+        callback.answer.assert_awaited_with(
+            CHARACTER_NOT_STARTED_TEXT, show_alert=True
+        )
+
+    assert service.characters_generated == []
+    assert service.starts == 0

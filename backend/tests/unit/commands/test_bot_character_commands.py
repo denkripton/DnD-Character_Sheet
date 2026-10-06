@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.exc import OperationalError
+from src.config import settings
 from src.messaging.contract import create_message
 from src.messaging.enums import MessageType
 from src.messaging.enums.constants import (
@@ -11,12 +13,14 @@ from src.messaging.enums.constants import (
     AUTH_PROVIDER_USER_ID_HEADER,
     AUTH_USER_ID_HEADER,
 )
+from src.modules.character.base.enums.generation_limits import GenerationLimits
 from src.modules.character.draft import CharacterDraftService
 from src.modules.character.models import CharacterDraft
-from src.modules.character.utils.random_character import KINDS
+from src.modules.character.utils.random_character import KINDS, NAMES, SPEC_CLASSES
 from src.modules.commands.dispatcher_factory import build_bot_command_dispatcher
 from src.utils.exceptions import MessageAuthenticationError
-from tests.utils import FakeRepo, FakeUnitOfWork
+from src.utils.interfaces.rate_limiter import RateLimitResult
+from tests.utils import FakeRepo, FakeUnitOfWork, StubRateLimiter
 
 
 class DummyUser:
@@ -24,16 +28,54 @@ class DummyUser:
         self.id = id
 
 
-def _environment():
+class RecordingRateLimiter:
+    def __init__(self, allowed: bool = True):
+        self.allowed = allowed
+        self.calls = []
+
+    async def is_limited(self, user_id, category, max_requests, time_window):
+        self.calls.append((user_id, category, max_requests, time_window))
+        if self.allowed:
+            return RateLimitResult(
+                allowed=True,
+                current_usage=0,
+                max_allowed=max_requests,
+                remaining=max_requests,
+                retry_after=0,
+            )
+        return RateLimitResult(
+            allowed=False,
+            current_usage=max_requests,
+            max_allowed=max_requests,
+            remaining=0,
+            retry_after=time_window,
+        )
+
+
+class FlakyUnitOfWork(FakeUnitOfWork):
+    def __init__(self, fail_after: int = 1):
+        super().__init__()
+        self.fail_after = fail_after
+
+    async def commit(self):
+        if self.commit_calls >= self.fail_after:
+            raise OperationalError(
+                "INSERT", {}, Exception("database is down")
+            )
+        await super().commit()
+
+
+def _environment(rate_limiter=None, uow=None):
     user_repo = FakeRepo(model=DummyUser)
     user_repo.rows.append(DummyUser("user-1"))
     user_repo.rows.append(DummyUser("user-2"))
     draft_repo = FakeRepo(model=CharacterDraft)
-    uow = FakeUnitOfWork()
+    uow = uow or FakeUnitOfWork()
     service = CharacterDraftService(
         draft_repository=draft_repo,
         user_repository=user_repo,
         unit_of_work=uow,
+        rate_limiter=rate_limiter or StubRateLimiter(allowed=True),
     )
 
     @asynccontextmanager
@@ -281,6 +323,7 @@ def test_signed_command_with_secret_verifies_and_dispatches():
             draft_repository=draft_repo,
             user_repository=user_repo,
             unit_of_work=FakeUnitOfWork(),
+            rate_limiter=StubRateLimiter(allowed=True),
         )
 
     producer = AsyncMock()
@@ -506,3 +549,226 @@ def test_full_wizard_flow_via_commands():
     assert data["kind"] == "Elf"
     assert data["spec_class"] == "Wizard"
     assert data["stats"] == STANDARD_STATS
+
+
+def test_character_generate_command_creates_full_character():
+    dispatcher, producer, draft_repo = _environment()
+    draft_id = _create_draft(dispatcher, producer)
+    correlation_id = uuid4()
+
+    command = _command(
+        MessageType.CHARACTER_GENERATE,
+        {"draft_id": draft_id, "method": "standard"},
+        correlation_id=correlation_id,
+    )
+    asyncio.run(dispatcher.handle(command))
+
+    event, routing_key = _published(producer)
+    assert event.type == MessageType.CHARACTER_GENERATED.value
+    assert routing_key == "events.character.generated"
+    assert event.correlation_id == correlation_id
+    assert event.payload["ok"] is True
+    assert event.payload["draft"]["data"]["name"] in NAMES
+    assert event.payload["draft"]["data"]["kind"] in KINDS
+    assert event.payload["draft"]["data"]["spec_class"] in SPEC_CLASSES
+    assert event.payload["stats"] == STANDARD_STATS
+    assert event.payload["modifiers"] == STANDARD_MODIFIERS
+    assert draft_repo.rows[0].data["name"] in NAMES
+    assert draft_repo.rows[0].data["stats"] == STANDARD_STATS
+
+
+def test_character_generate_rate_limited():
+    limiter = RecordingRateLimiter(allowed=False)
+    dispatcher, producer, draft_repo = _environment(rate_limiter=limiter)
+    draft_id = _create_draft(dispatcher, producer)
+
+    command = _command(
+        MessageType.CHARACTER_GENERATE,
+        {"draft_id": draft_id, "method": "standard"},
+    )
+    asyncio.run(dispatcher.handle(command))
+
+    event, _ = _published(producer)
+    assert event.payload["ok"] is False
+    assert "Daily limit reached" in event.payload["error"]
+    assert draft_repo.rows[0].data == {}
+
+
+def test_character_generate_regeneration_counts_against_limit():
+    limiter = RecordingRateLimiter(allowed=True)
+    dispatcher, producer, _ = _environment(rate_limiter=limiter)
+    draft_id = _create_draft(dispatcher, producer)
+
+    assert limiter.calls == []
+
+    command = _command(
+        MessageType.CHARACTER_GENERATE,
+        {"draft_id": draft_id, "method": "standard"},
+    )
+    asyncio.run(dispatcher.handle(command))
+    event, _ = _published(producer)
+    assert event.payload["ok"] is True
+    assert len(limiter.calls) == 1
+    assert limiter.calls[0] == (
+        "user-1",
+        GenerationLimits.KEY_PREFIX.value,
+        settings.CHARACTER_GENERATION_DAILY_LIMIT,
+        GenerationLimits.DAILY_WINDOW_SECONDS.value,
+    )
+
+    command = _command(
+        MessageType.CHARACTER_GENERATE,
+        {"draft_id": draft_id, "method": "standard"},
+    )
+    asyncio.run(dispatcher.handle(command))
+    event, _ = _published(producer)
+    assert event.payload["ok"] is True
+    assert len(limiter.calls) == 2
+
+
+def test_daily_limit_counting_semantics():
+    limiter = RecordingRateLimiter(allowed=True)
+    dispatcher, producer, _ = _environment(rate_limiter=limiter)
+    draft_id = _create_draft(dispatcher, producer)
+
+    assert limiter.calls == []
+
+    for parameter, value in [("name", "Aria"), ("kind", "Elf")]:
+        command = _command(
+            MessageType.CHARACTER_UPDATE_PARAMETER,
+            {"draft_id": draft_id, "parameter": parameter, "value": value},
+        )
+        asyncio.run(dispatcher.handle(command))
+    assert limiter.calls == []
+
+    command = _command(
+        MessageType.CHARACTER_UPDATE_PARAMETER,
+        {"draft_id": draft_id, "parameter": "kind", "generate": True},
+    )
+    asyncio.run(dispatcher.handle(command))
+    assert limiter.calls == []
+
+    command = _command(
+        MessageType.CHARACTER_STATS,
+        {"draft_id": draft_id, "method": "standard"},
+    )
+    asyncio.run(dispatcher.handle(command))
+    assert limiter.calls == []
+
+    command = _command(
+        MessageType.CHARACTER_STATS,
+        {"draft_id": draft_id, "values": STANDARD_VALUES},
+    )
+    asyncio.run(dispatcher.handle(command))
+    assert limiter.calls == []
+
+    command = _command(
+        MessageType.CHARACTER_GENERATE,
+        {"draft_id": draft_id, "method": "standard"},
+    )
+    asyncio.run(dispatcher.handle(command))
+    assert len(limiter.calls) == 1
+
+
+def test_character_generate_other_user_draft_rejected():
+    dispatcher, producer, _ = _environment()
+    draft_id = _create_draft(dispatcher, producer)
+
+    command = _command(
+        MessageType.CHARACTER_GENERATE,
+        {"draft_id": draft_id, "method": "standard"},
+        headers=_headers("user-2"),
+    )
+    asyncio.run(dispatcher.handle(command))
+
+    event, _ = _published(producer)
+    assert event.payload["ok"] is False
+    assert "not found" in event.payload["error"]
+
+
+def test_character_generate_invalid_payload_rejected():
+    dispatcher, producer, _ = _environment()
+    draft_id = _create_draft(dispatcher, producer)
+
+    command = _command(
+        MessageType.CHARACTER_GENERATE,
+        {"draft_id": draft_id},
+    )
+    asyncio.run(dispatcher.handle(command))
+
+    event, _ = _published(producer)
+    assert event.payload == {
+        "ok": False,
+        "error": "Invalid character generation request.",
+    }
+
+
+def test_character_generate_unsupported_method_rejected():
+    dispatcher, producer, draft_repo = _environment()
+    draft_id = _create_draft(dispatcher, producer)
+
+    command = _command(
+        MessageType.CHARACTER_GENERATE,
+        {"draft_id": draft_id, "method": "manual"},
+    )
+    asyncio.run(dispatcher.handle(command))
+
+    event, _ = _published(producer)
+    assert event.payload["ok"] is False
+    assert "Unsupported generation method: manual." in event.payload["error"]
+    assert draft_repo.rows[0].data == {}
+
+
+def test_character_generate_missing_draft_id_rejected():
+    dispatcher, producer, _ = _environment()
+    command = _command(
+        MessageType.CHARACTER_GENERATE, {"method": "standard"}
+    )
+    asyncio.run(dispatcher.handle(command))
+
+    event, _ = _published(producer)
+    assert event.payload == {
+        "ok": False,
+        "error": "Invalid character generation request.",
+    }
+
+
+def test_character_generate_persistence_failure_returns_error():
+    dispatcher, producer, _ = _environment(uow=FlakyUnitOfWork(fail_after=1))
+    draft_id = _create_draft(dispatcher, producer)
+
+    command = _command(
+        MessageType.CHARACTER_GENERATE,
+        {"draft_id": draft_id, "method": "standard"},
+    )
+    asyncio.run(dispatcher.handle(command))
+
+    event, _ = _published(producer)
+    assert event.payload["ok"] is False
+    assert "could not be completed" in event.payload["error"]
+
+
+def test_character_generate_publish_failure_propagates():
+    dispatcher, producer, _ = _environment()
+    draft_id = _create_draft(dispatcher, producer)
+    producer.publish.side_effect = RuntimeError("rabbitmq is down")
+
+    command = _command(
+        MessageType.CHARACTER_GENERATE,
+        {"draft_id": draft_id, "method": "standard"},
+    )
+    with pytest.raises(RuntimeError):
+        asyncio.run(dispatcher.handle(command))
+
+
+def test_character_generate_requires_identity_headers():
+    dispatcher, producer, draft_repo = _environment()
+    command = _command(
+        MessageType.CHARACTER_GENERATE,
+        {"draft_id": "00000000-0000-0000-0000-000000000000", "method": "standard"},
+        headers={},
+    )
+    with pytest.raises(MessageAuthenticationError):
+        asyncio.run(dispatcher.handle(command))
+    assert draft_repo.rows == []
+    producer.publish.assert_not_awaited()

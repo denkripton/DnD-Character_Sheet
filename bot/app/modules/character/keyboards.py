@@ -16,6 +16,17 @@ CALLBACK_METHOD = f"{CALLBACK_PREFIX}:method"
 CALLBACK_REGEN = f"{CALLBACK_PREFIX}:regen"
 CALLBACK_EDIT = f"{CALLBACK_PREFIX}:edit"
 CALLBACK_CONFIRM = f"{CALLBACK_PREFIX}:confirm"
+CALLBACK_GEN_FULL = f"{CALLBACK_PREFIX}:gen_full"
+CALLBACK_GEN_STEP = f"{CALLBACK_PREFIX}:gen_step"
+CALLBACK_FULL_METHOD = f"{CALLBACK_PREFIX}:full_method"
+CALLBACK_FULL_REGEN = f"{CALLBACK_PREFIX}:full_regen"
+CALLBACK_FULL_EDIT = f"{CALLBACK_PREFIX}:full_edit"
+
+GENERATION_METHOD_LABELS = {
+    "random": "🎲 Random (4d6)",
+    "standard": "📋 Standard array",
+    "point_buy": "🛒 Point buy",
+}
 
 
 def navigation_keyboard() -> InlineKeyboardMarkup:
@@ -25,6 +36,62 @@ def navigation_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="⬅️ Back", callback_data=CALLBACK_BACK),
                 InlineKeyboardButton(text="❌ Cancel", callback_data=CALLBACK_CANCEL),
             ]
+        ]
+    )
+
+
+def generation_mode_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🎲 Generate a full character",
+                    callback_data=CALLBACK_GEN_FULL,
+                ),
+                InlineKeyboardButton(
+                    text="✏️ Create step by step",
+                    callback_data=CALLBACK_GEN_STEP,
+                ),
+            ]
+        ]
+    )
+
+
+def generation_method_keyboard() -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                text=GENERATION_METHOD_LABELS[method],
+                callback_data=f"{CALLBACK_FULL_METHOD}:{method}",
+            )
+            for method in STATS_GENERATOR_METHODS
+        ],
+        [
+            InlineKeyboardButton(text="⬅️ Back", callback_data=CALLBACK_BACK),
+            InlineKeyboardButton(text="❌ Cancel", callback_data=CALLBACK_CANCEL),
+        ],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def generation_result_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🎲 Regenerate",
+                    callback_data=CALLBACK_FULL_REGEN,
+                ),
+                InlineKeyboardButton(
+                    text="✏️ Edit fields",
+                    callback_data=CALLBACK_FULL_EDIT,
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="❌ Cancel", callback_data=CALLBACK_CANCEL
+                ),
+            ],
         ]
     )
 

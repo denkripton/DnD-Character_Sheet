@@ -1,6 +1,7 @@
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 
+from sqlalchemy.exc import SQLAlchemyError
 from src.messaging.contract import create_message, messaging_route
 from src.messaging.dispatcher import CommandDispatcher
 from src.messaging.enums import MessageType
@@ -13,7 +14,7 @@ from src.modules.character.draft import (
     CharacterDraftService,
     character_draft_service_scope,
 )
-from src.utils.exceptions import ServiceError
+from src.utils.exceptions import RateLimitExceeded, ServiceError
 
 DraftServiceScope = Callable[[], AbstractAsyncContextManager[CharacterDraftService]]
 
@@ -30,7 +31,7 @@ def build_bot_command_dispatcher(
     dispatcher.register(
         MessageType.CHARACTER_GENERATE,
         _require_authenticated(
-            _publish_generated_event(producer),
+            _handle_draft_generate(producer, draft_service_scope),
             secret,
             max_age_seconds,
         ),
@@ -86,19 +87,6 @@ def _require_authenticated(
     return wrapped
 
 
-def _publish_generated_event(producer: MessagePublisher):
-    async def handle(envelope) -> None:
-        event = create_message(
-            MessageType.CHARACTER_GENERATED,
-            envelope.payload,
-            correlation_id=envelope.correlation_id,
-            headers=envelope.headers,
-        )
-        await producer.publish(event, messaging_route(MessageType.CHARACTER_GENERATED))
-
-    return handle
-
-
 async def _publish_response(
     producer: MessagePublisher,
     message_type: MessageType,
@@ -130,15 +118,55 @@ def _stats_payload(result) -> dict:
     return {"ok": True}
 
 
+def _generate_payload(result) -> dict:
+    if isinstance(result, dict) and isinstance(result.get("draft"), CharacterDraftReadSchema):
+        return {
+            "ok": True,
+            "draft": result["draft"].model_dump(mode="json"),
+            "stats": result.get("stats"),
+            "modifiers": result.get("modifiers"),
+        }
+    return {"ok": True}
+
+
 async def _draft_call(
     draft_service_scope, call, payload_builder=_draft_payload
 ) -> dict:
     try:
         async with draft_service_scope() as service:
             result = await call(service)
+    except RateLimitExceeded as exc:
+        return {"ok": False, "error": str(exc)}
     except ServiceError as exc:
         return {"ok": False, "error": str(exc)}
+    except SQLAlchemyError:
+        return {
+            "ok": False,
+            "error": "The request could not be completed. Please try again.",
+        }
     return payload_builder(result)
+
+
+def _handle_draft_generate(producer: MessagePublisher, draft_service_scope):
+    async def handle(envelope: MessageEnvelope) -> None:
+        user_id = _identity(envelope)[AUTH_USER_ID_HEADER]
+        payload = envelope.payload if isinstance(envelope.payload, dict) else {}
+        draft_id = payload.get("draft_id")
+        method = payload.get("method")
+
+        async def call(service):
+            if not draft_id or not isinstance(method, str) or not method:
+                raise ServiceError(
+                    msg="Invalid character generation request.", code=422
+                )
+            return await service.generate_character(user_id, draft_id, method)
+
+        result = await _draft_call(draft_service_scope, call, _generate_payload)
+        await _publish_response(
+            producer, MessageType.CHARACTER_GENERATED, envelope, result
+        )
+
+    return handle
 
 
 def _handle_draft_create(producer: MessagePublisher, draft_service_scope):

@@ -7,11 +7,19 @@ from app.modules.character.keyboards import (
     CALLBACK_CANCEL,
     CALLBACK_CONFIRM,
     CALLBACK_EDIT,
+    CALLBACK_FULL_EDIT,
+    CALLBACK_FULL_METHOD,
+    CALLBACK_FULL_REGEN,
+    CALLBACK_GEN_FULL,
+    CALLBACK_GEN_STEP,
     CALLBACK_GENERATE,
     CALLBACK_MANUAL,
     CALLBACK_METHOD,
     CALLBACK_REGEN,
     CALLBACK_SET,
+    generation_method_keyboard,
+    generation_mode_keyboard,
+    generation_result_keyboard,
     navigation_keyboard,
     stats_keyboard,
     stats_method_keyboard,
@@ -45,6 +53,9 @@ from app.utils.constants import (
     CHARACTER_CANCELLED_TEXT,
     CHARACTER_EMPTY_INPUT_TEXT,
     CHARACTER_FIRST_STEP_TEXT,
+    CHARACTER_GENERATION_HINT_TEXT,
+    CHARACTER_GENERATION_METHOD_TEXT,
+    CHARACTER_GENERATION_MODE_TEXT,
     CHARACTER_IN_PROGRESS_TEXT,
     CHARACTER_MANUAL_HINT_TEXT,
     CHARACTER_NOT_STARTED_TEXT,
@@ -113,6 +124,29 @@ def _summary_text(data: dict) -> str:
         "The draft is stored on the server. "
         "Use /back to revise a value or /cancel to discard it."
     )
+    return "\n".join(lines)
+
+
+def _generation_result_text(data: dict) -> str:
+    draft = data.get("draft_data") or {}
+    lines = [
+        "Your character has been generated:",
+        f"Name: {draft.get('name') or '-'}",
+        f"Race: {draft.get('kind') or '-'}",
+        f"Class: {draft.get('spec_class') or '-'}",
+        f"Alignment: {draft.get('alignment') or '-'}",
+        f"Background: {draft.get('background') or '-'}",
+    ]
+    stats = data.get("stats") or {}
+    modifiers = data.get("modifiers") or {}
+    if stats:
+        lines.append("")
+        lines.append(
+            f"Ability scores ({stats_method_label(data.get('stats_method'))}):"
+        )
+        lines.extend(_stats_lines(stats, modifiers))
+    lines.append("")
+    lines.append("Regenerate, edit any field, or /cancel to discard the draft.")
     return "\n".join(lines)
 
 
@@ -228,13 +262,15 @@ async def handle_create(
     except BackendUnavailableError:
         await message.answer(CHARACTER_UNAVAILABLE_TEXT)
         return
-    first_step = STEPS[0]
-    await state.set_state(state_for_position(first_step.position))
+    await state.set_state(CharacterCreationStates.generation_mode)
     await state.update_data(
-        draft_id=draft.get("id"), draft_data=draft.get("data") or {}
+        draft_id=draft.get("id"),
+        draft_data=draft.get("data") or {},
+        edit_from_generation=False,
     )
     await message.answer(
-        prompt_for(first_step), reply_markup=step_keyboard(first_step)
+        CHARACTER_GENERATION_MODE_TEXT,
+        reply_markup=generation_mode_keyboard(),
     )
 
 
@@ -258,6 +294,10 @@ async def handle_step_input(
 
 async def handle_stats_method_input(message: Message, state) -> None:
     await message.answer(CHARACTER_STATS_METHOD_HINT_TEXT)
+
+
+async def handle_generation_hint(message: Message, state) -> None:
+    await message.answer(CHARACTER_GENERATION_HINT_TEXT)
 
 
 async def handle_stats_input(
@@ -304,9 +344,19 @@ async def _back_reply(state) -> tuple[str, InlineKeyboardMarkup | None]:
     data = await state.get_data()
     if not data.get("draft_id"):
         return CHARACTER_NOT_STARTED_TEXT, None
-    position = position_for_state(await state.get_state())
+    current = await state.get_state()
+    if current == CharacterCreationStates.generation_method.state:
+        await state.set_state(CharacterCreationStates.generation_mode)
+        return CHARACTER_GENERATION_MODE_TEXT, generation_mode_keyboard()
+    if current == CharacterCreationStates.generation_result.state:
+        await state.set_state(CharacterCreationStates.generation_method)
+        return CHARACTER_GENERATION_METHOD_TEXT, generation_method_keyboard()
+    position = position_for_state(current)
     if position is None:
         return CHARACTER_NOT_STARTED_TEXT, None
+    if position == "name" and data.get("edit_from_generation"):
+        await state.set_state(CharacterCreationStates.generation_result)
+        return _generation_result_text(data), generation_result_keyboard()
     previous = previous_position(position)
     if previous is None:
         return CHARACTER_FIRST_STEP_TEXT, None
@@ -344,6 +394,107 @@ async def handle_cancel(
     message: Message, state, creation_service: CharacterCreationService
 ) -> None:
     await _cancel(message, state, creation_service)
+
+
+async def _start_full_generation(callback: CallbackQuery, state) -> None:
+    data = await state.get_data()
+    if not data.get("draft_id") or not data.get("auth"):
+        await callback.answer(CHARACTER_NOT_STARTED_TEXT, show_alert=True)
+        return
+    if (await state.get_state()) != CharacterCreationStates.generation_mode.state:
+        await callback.answer(CHARACTER_STALE_TEXT, show_alert=True)
+        return
+    await state.set_state(CharacterCreationStates.generation_method)
+    await callback.answer()
+    await callback.message.answer(
+        CHARACTER_GENERATION_METHOD_TEXT,
+        reply_markup=generation_method_keyboard(),
+    )
+
+
+async def _start_step_by_step(callback: CallbackQuery, state) -> None:
+    data = await state.get_data()
+    if not data.get("draft_id") or not data.get("auth"):
+        await callback.answer(CHARACTER_NOT_STARTED_TEXT, show_alert=True)
+        return
+    if (await state.get_state()) != CharacterCreationStates.generation_mode.state:
+        await callback.answer(CHARACTER_STALE_TEXT, show_alert=True)
+        return
+    first_step = STEPS[0]
+    await state.update_data(edit_from_generation=False)
+    await state.set_state(state_for_position(first_step.position))
+    await callback.answer()
+    await callback.message.answer(
+        prompt_for(first_step), reply_markup=step_keyboard(first_step)
+    )
+
+
+async def _handle_full_generation(
+    callback: CallbackQuery,
+    state,
+    creation_service: CharacterCreationService,
+    method: str,
+) -> None:
+    data = await state.get_data()
+    if not data.get("draft_id") or not data.get("auth"):
+        await callback.answer(CHARACTER_NOT_STARTED_TEXT, show_alert=True)
+        return
+    current = await state.get_state()
+    allowed_states = (
+        CharacterCreationStates.generation_method.state,
+        CharacterCreationStates.generation_result.state,
+    )
+    if current not in allowed_states:
+        await callback.answer(CHARACTER_STALE_TEXT, show_alert=True)
+        return
+    if method not in STATS_GENERATOR_METHODS:
+        await callback.answer(CHARACTER_STALE_TEXT, show_alert=True)
+        return
+    auth = data["auth"]
+    draft_id = data["draft_id"]
+    try:
+        result = await creation_service.generate_character(auth, draft_id, method)
+    except CharacterCreationError as exc:
+        await callback.answer()
+        await callback.message.answer(str(exc))
+        return
+    except BackendUnavailableError:
+        await callback.answer()
+        await callback.message.answer(CHARACTER_UNAVAILABLE_TEXT)
+        return
+    draft = result.get("draft") or {}
+    await state.update_data(
+        draft_data=draft.get("data") or {},
+        stats_method=method,
+        stats=result.get("stats"),
+        modifiers=result.get("modifiers"),
+        edit_from_generation=False,
+    )
+    await state.set_state(CharacterCreationStates.generation_result)
+    await callback.answer()
+    await callback.message.answer(
+        _generation_result_text(await state.get_data()),
+        reply_markup=generation_result_keyboard(),
+    )
+
+
+async def _start_field_editing(callback: CallbackQuery, state) -> None:
+    data = await state.get_data()
+    if not data.get("draft_id") or not data.get("auth"):
+        await callback.answer(CHARACTER_NOT_STARTED_TEXT, show_alert=True)
+        return
+    if (
+        await state.get_state()
+    ) != CharacterCreationStates.generation_result.state:
+        await callback.answer(CHARACTER_STALE_TEXT, show_alert=True)
+        return
+    first_step = STEPS[0]
+    await state.update_data(edit_from_generation=True)
+    await state.set_state(state_for_position(first_step.position))
+    await callback.answer()
+    await callback.message.answer(
+        prompt_for(first_step), reply_markup=step_keyboard(first_step)
+    )
 
 
 async def _choose_method(
@@ -468,6 +619,24 @@ async def handle_callback(
         await callback.answer()
         await _cancel(callback.message, state, creation_service)
         return
+    if raw == CALLBACK_GEN_FULL:
+        await _start_full_generation(callback, state)
+        return
+    if raw == CALLBACK_GEN_STEP:
+        await _start_step_by_step(callback, state)
+        return
+    if raw.startswith(f"{CALLBACK_FULL_METHOD}:"):
+        method = raw.removeprefix(f"{CALLBACK_FULL_METHOD}:")
+        await _handle_full_generation(callback, state, creation_service, method)
+        return
+    if raw == CALLBACK_FULL_REGEN:
+        data = await state.get_data()
+        method = data.get("stats_method")
+        await _handle_full_generation(callback, state, creation_service, method)
+        return
+    if raw == CALLBACK_FULL_EDIT:
+        await _start_field_editing(callback, state)
+        return
     if raw.startswith(f"{CALLBACK_METHOD}:"):
         method = raw.removeprefix(f"{CALLBACK_METHOD}:")
         await _choose_method(callback, state, creation_service, method)
@@ -533,6 +702,14 @@ def build_character_creation_router() -> Router:
             CharacterCreationStates.name,
             CharacterCreationStates.race,
             CharacterCreationStates.spec_class,
+        ),
+    )
+    router.message.register(
+        handle_generation_hint,
+        StateFilter(
+            CharacterCreationStates.generation_mode,
+            CharacterCreationStates.generation_method,
+            CharacterCreationStates.generation_result,
         ),
     )
     router.message.register(

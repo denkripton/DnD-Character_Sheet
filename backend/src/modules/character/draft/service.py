@@ -1,7 +1,9 @@
 from uuid import UUID
 
 from pydantic import ValidationError
+from src.config import settings
 from src.modules.auth.repository import UserRepository
+from src.modules.character.base.enums.generation_limits import GenerationLimits
 from src.modules.character.base.schemas import CharacterUpdateSchema
 from src.modules.character.draft.schemas import CharacterDraftReadSchema
 from src.modules.character.models import CharacterDraft
@@ -15,7 +17,8 @@ from src.modules.character.utils import (
     generate_standard_array,
 )
 from src.modules.character.utils.random_character import generate_random_character
-from src.utils.exceptions import ServiceError
+from src.utils.exceptions import RateLimitExceeded, ServiceError
+from src.utils.interfaces.rate_limiter import RateLimiter
 from src.utils.unit_of_work import UnitOfWork
 
 PARAMETER_LABELS = {
@@ -27,6 +30,10 @@ PARAMETER_LABELS = {
     "level": "Level",
     "experience_points": "Experience points",
 }
+
+FULL_GENERATION_METHODS = ("random", "standard", "point_buy")
+
+DAILY_LIMIT_COUNTED_OPERATIONS = frozenset({"generate_character"})
 
 
 def parameter_label(parameter: str) -> str:
@@ -88,10 +95,30 @@ class CharacterDraftService:
         draft_repository: CharacterDraftRepository,
         user_repository: UserRepository,
         unit_of_work: UnitOfWork,
+        rate_limiter: RateLimiter,
     ):
         self.draft_repo = draft_repository
         self.user_repo = user_repository
         self.uow = unit_of_work
+        self.rate_limiter = rate_limiter
+
+    async def _enforce_daily_generation_limit(
+        self, user_id: str, operation: str
+    ) -> None:
+        if operation not in DAILY_LIMIT_COUNTED_OPERATIONS:
+            return
+        result = await self.rate_limiter.is_limited(
+            user_id=user_id,
+            category=GenerationLimits.KEY_PREFIX.value,
+            max_requests=settings.CHARACTER_GENERATION_DAILY_LIMIT,
+            time_window=GenerationLimits.DAILY_WINDOW_SECONDS.value,
+        )
+        if not result.allowed:
+            raise RateLimitExceeded(
+                limit=result.max_allowed,
+                used=result.current_usage,
+                retry_after=result.retry_after,
+            )
 
     async def _get_owned(self, user_id: str, draft_id) -> CharacterDraft:
         try:
@@ -135,6 +162,7 @@ class CharacterDraftService:
         return CharacterDraftReadSchema.model_validate(draft)
 
     async def create_draft(self, user_id: str) -> CharacterDraftReadSchema:
+        await self._enforce_daily_generation_limit(user_id, "create_draft")
         user = await self.user_repo.get_by_id(user_id)
         if user is None:
             raise ServiceError(msg="User does not exist", code=422)
@@ -147,12 +175,14 @@ class CharacterDraftService:
     async def update_parameter(
         self, user_id: str, draft_id, parameter: str, value
     ) -> CharacterDraftReadSchema:
+        await self._enforce_daily_generation_limit(user_id, "update_parameter")
         draft = await self._get_owned(user_id, draft_id)
         return await self._apply(draft, parameter, value)
 
     async def generate_parameter(
         self, user_id: str, draft_id, parameter: str
     ) -> CharacterDraftReadSchema:
+        await self._enforce_daily_generation_limit(user_id, "generate_parameter")
         draft = await self._get_owned(user_id, draft_id)
         generated = generate_random_character()
         if parameter not in generated:
@@ -163,27 +193,44 @@ class CharacterDraftService:
         return await self._apply(draft, parameter, generated[parameter])
 
     async def delete_draft(self, user_id: str, draft_id) -> None:
+        await self._enforce_daily_generation_limit(user_id, "delete_draft")
         draft = await self._get_owned(user_id, draft_id)
         await self.draft_repo.delete_obj(draft.id)
         await self.uow.commit()
 
-    async def generate_stats(self, user_id: str, draft_id, method: str) -> dict:
+    async def generate_character(
+        self, user_id: str, draft_id, method: str
+    ) -> dict:
+        await self._enforce_daily_generation_limit(user_id, "generate_character")
         draft = await self._get_owned(user_id, draft_id)
-        if method == "standard":
-            generated = generate_standard_array()
-        elif method == "point_buy":
-            generated = generate_point_buy_stats()
-        elif method == "random":
-            generated = generate_random_stats()
-        else:
+        if method not in FULL_GENERATION_METHODS:
             raise ServiceError(
-                msg=f"Unsupported stats generation method: {method}.", code=422
+                msg=(
+                    f"Unsupported generation method: {method}. "
+                    "Manual stats are available in step-by-step creation."
+                ),
+                code=422,
             )
-        stats_dict = assign_stats(generated)
+        generated = generate_random_character()
+        stats_dict = _generate_stats_values(method)
+        draft.data = {**(draft.data or {}), **generated, "stats": stats_dict}
+        await self.uow.commit()
+        await self.uow.refresh(draft)
+        return {
+            "draft": CharacterDraftReadSchema.model_validate(draft),
+            "stats": stats_dict,
+            "modifiers": compute_modifiers(stats_dict),
+        }
+
+    async def generate_stats(self, user_id: str, draft_id, method: str) -> dict:
+        await self._enforce_daily_generation_limit(user_id, "generate_stats")
+        draft = await self._get_owned(user_id, draft_id)
+        stats_dict = _generate_stats_values(method)
         await self._store_stats(draft, stats_dict)
         return {"stats": stats_dict, "modifiers": compute_modifiers(stats_dict)}
 
     async def set_stats(self, user_id: str, draft_id, values) -> dict:
+        await self._enforce_daily_generation_limit(user_id, "set_stats")
         draft = await self._get_owned(user_id, draft_id)
         stats_dict = _parse_stats_values(values)
         try:
@@ -197,3 +244,17 @@ class CharacterDraftService:
         draft.data = {**(draft.data or {}), "stats": stats_dict}
         await self.uow.commit()
         await self.uow.refresh(draft)
+
+
+def _generate_stats_values(method: str) -> dict:
+    if method == "standard":
+        generated = generate_standard_array()
+    elif method == "point_buy":
+        generated = generate_point_buy_stats()
+    elif method == "random":
+        generated = generate_random_stats()
+    else:
+        raise ServiceError(
+            msg=f"Unsupported stats generation method: {method}.", code=422
+        )
+    return assign_stats(generated)
