@@ -1,2 +1,2 @@
-ROUTING_KEY_ALL_COMMANDS = "commands.*"
-ROUTING_KEY_ALL_EVENTS = "events.*"
+ROUTING_KEY_ALL_COMMANDS = "commands.#"
+ROUTING_KEY_ALL_EVENTS = "events.#"

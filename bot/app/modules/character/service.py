@@ -1,0 +1,73 @@
+from app.messaging import MessageType
+
+CHARACTER_COMMAND_TIMEOUT = 10.0
+FALLBACK_ERROR_TEXT = "Something went wrong. Please try again."
+
+
+class CharacterCreationError(Exception):
+    pass
+
+
+class BackendUnavailableError(Exception):
+    pass
+
+
+class CharacterCreationService:
+    def __init__(self, rabbit, timeout: float = CHARACTER_COMMAND_TIMEOUT):
+        self._rabbit = rabbit
+        self._timeout = timeout
+
+    async def start(self, auth: dict) -> dict:
+        payload = await self._request(MessageType.CHARACTER_CREATE, {}, auth)
+        return self._extract_draft(payload)
+
+    async def set_value(
+        self, auth: dict, draft_id: str, parameter: str, value: str
+    ) -> dict:
+        payload = await self._request(
+            MessageType.CHARACTER_UPDATE_PARAMETER,
+            {"draft_id": draft_id, "parameter": parameter, "value": value},
+            auth,
+        )
+        return self._extract_draft(payload)
+
+    async def generate_value(
+        self, auth: dict, draft_id: str, parameter: str
+    ) -> dict:
+        payload = await self._request(
+            MessageType.CHARACTER_UPDATE_PARAMETER,
+            {"draft_id": draft_id, "parameter": parameter, "generate": True},
+            auth,
+        )
+        return self._extract_draft(payload)
+
+    async def cancel(self, auth: dict, draft_id: str) -> None:
+        await self._request(
+            MessageType.CHARACTER_DELETE, {"draft_id": draft_id}, auth
+        )
+
+    async def _request(self, message_type, payload, auth: dict) -> dict:
+        try:
+            envelope = await self._rabbit.request(
+                message_type,
+                payload,
+                timeout=self._timeout,
+                provider=auth.get("provider"),
+                provider_user_id=auth.get("provider_user_id"),
+                user_id=auth.get("user_id"),
+            )
+        except Exception as exc:
+            raise BackendUnavailableError(str(exc)) from exc
+        response = envelope.payload
+        if not isinstance(response, dict):
+            raise CharacterCreationError(FALLBACK_ERROR_TEXT)
+        if not response.get("ok"):
+            raise CharacterCreationError(response.get("error") or FALLBACK_ERROR_TEXT)
+        return response
+
+    @staticmethod
+    def _extract_draft(payload: dict) -> dict:
+        draft = payload.get("draft")
+        if not isinstance(draft, dict):
+            raise CharacterCreationError(FALLBACK_ERROR_TEXT)
+        return draft

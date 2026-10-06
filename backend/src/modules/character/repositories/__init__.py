@@ -7,6 +7,7 @@ from src.modules.character.repositories.proficiency import ProficiencyRepository
 from src.modules.character.repositories.feature import FeatureRepository
 from src.modules.character.repositories.personality import PersonalityRepository
 from src.modules.character.repositories.backstory import BackstoryRepository
+from src.modules.character.repositories.draft import CharacterDraftRepository
 
 __all__ = [
     "CharacterRepository",
@@ -18,4 +19,5 @@ __all__ = [
     "FeatureRepository",
     "PersonalityRepository",
     "BackstoryRepository",
+    "CharacterDraftRepository",
 ]

@@ -7,6 +7,7 @@ from aiogram.fsm.storage.base import BaseStorage
 from app.api import create_bot, create_dispatcher
 from app.config import load_config
 from app.dependencies import build_rabbitmq_client
+from app.modules.character import CharacterCreationService
 from app.utils.logging import configure_logging
 
 
@@ -25,6 +26,7 @@ async def main() -> None:
     dispatcher = create_dispatcher(config)
     rabbit = build_rabbitmq_client(config)
     dispatcher["rabbit"] = rabbit
+    dispatcher["creation_service"] = CharacterCreationService(rabbit)
 
     await rabbit.start()
     logger.info("bot_started")

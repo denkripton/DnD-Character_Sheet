@@ -1,4 +1,5 @@
-from uuid import UUID
+import asyncio
+from uuid import UUID, uuid4
 
 import structlog
 from src.infrastructure.rabbitmq.bus import RabbitMQMessageBus
@@ -29,6 +30,7 @@ class BotRabbitMQClient:
         self._config = config
         self._owns_bus = bus is None
         self._event_handlers: list[MessageHandler] = []
+        self._pending: dict[UUID, asyncio.Future] = {}
         if bus is not None:
             self._bus = bus
         else:
@@ -102,6 +104,29 @@ class BotRabbitMQClient:
         await self._bus.publish(envelope, messaging_route(message_type))
         return envelope
 
+    async def request(
+        self,
+        message_type: MessageType,
+        payload=None,
+        *,
+        timeout: float = 10.0,
+        correlation_id: UUID | None = None,
+        **kwargs,
+    ) -> MessageEnvelope:
+        correlation_id = correlation_id or uuid4()
+        future: asyncio.Future = asyncio.get_running_loop().create_future()
+        self._pending[correlation_id] = future
+        try:
+            await self.publish_command(
+                message_type,
+                payload,
+                correlation_id=correlation_id,
+                **kwargs,
+            )
+            return await asyncio.wait_for(future, timeout)
+        finally:
+            self._pending.pop(correlation_id, None)
+
     async def _subscribe_events(self) -> None:
         await self._bus.subscribe(
             self.events_queue,
@@ -115,5 +140,9 @@ class BotRabbitMQClient:
             message_type=envelope.type,
             correlation_id=str(envelope.correlation_id) if envelope.correlation_id else None,
         )
+        if envelope.correlation_id is not None:
+            future = self._pending.get(envelope.correlation_id)
+            if future is not None and not future.done():
+                future.set_result(envelope)
         for handler in self._event_handlers:
             await handler(envelope)

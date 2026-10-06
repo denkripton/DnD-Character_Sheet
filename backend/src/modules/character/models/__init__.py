@@ -7,6 +7,7 @@ from src.modules.character.models.proficiency import Proficiency
 from src.modules.character.models.feature import Feature
 from src.modules.character.models.personality import Personality
 from src.modules.character.models.backstory import Backstory
+from src.modules.character.models.draft import CharacterDraft
 
 
 __all__ = [
@@ -19,4 +20,5 @@ __all__ = [
     "Feature",
     "Personality",
     "Backstory",
+    "CharacterDraft",
 ]
