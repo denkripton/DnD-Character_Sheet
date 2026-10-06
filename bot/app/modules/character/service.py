@@ -41,6 +41,24 @@ class CharacterCreationService:
         )
         return self._extract_draft(payload)
 
+    async def generate_stats(
+        self, auth: dict, draft_id: str, method: str
+    ) -> dict:
+        payload = await self._request(
+            MessageType.CHARACTER_STATS,
+            {"draft_id": draft_id, "method": method},
+            auth,
+        )
+        return self._extract_stats(payload)
+
+    async def set_stats(self, auth: dict, draft_id: str, values: list) -> dict:
+        payload = await self._request(
+            MessageType.CHARACTER_STATS,
+            {"draft_id": draft_id, "values": values},
+            auth,
+        )
+        return self._extract_stats(payload)
+
     async def cancel(self, auth: dict, draft_id: str) -> None:
         await self._request(
             MessageType.CHARACTER_DELETE, {"draft_id": draft_id}, auth
@@ -71,3 +89,13 @@ class CharacterCreationService:
         if not isinstance(draft, dict):
             raise CharacterCreationError(FALLBACK_ERROR_TEXT)
         return draft
+
+    @staticmethod
+    def _extract_stats(payload: dict) -> dict:
+        stats = payload.get("stats")
+        if not isinstance(stats, dict):
+            raise CharacterCreationError(FALLBACK_ERROR_TEXT)
+        return {
+            "stats": stats,
+            "modifiers": payload.get("modifiers"),
+        }

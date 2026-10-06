@@ -140,3 +140,73 @@ def test_response_without_draft_raises_character_creation_error():
 
     with pytest.raises(CharacterCreationError):
         asyncio.run(service.start(AUTH))
+
+
+def test_generate_stats_sends_stats_command_with_method():
+    service, rabbit = _service(
+        payload={
+            "ok": True,
+            "stats": {"strength": 15},
+            "modifiers": {"strength": 2},
+        }
+    )
+
+    result = asyncio.run(service.generate_stats(AUTH, "d1", "point_buy"))
+
+    assert result == {
+        "stats": {"strength": 15},
+        "modifiers": {"strength": 2},
+    }
+    call = rabbit.calls[0]
+    assert call["message_type"] == MessageType.CHARACTER_STATS
+    assert call["payload"] == {
+        "draft_id": "d1",
+        "method": "point_buy",
+    }
+    assert call["kwargs"]["user_id"] == "user-1"
+
+
+def test_set_stats_sends_values_command():
+    service, rabbit = _service(
+        payload={
+            "ok": True,
+            "stats": {"strength": 15},
+            "modifiers": {"strength": 2},
+        }
+    )
+
+    result = asyncio.run(
+        service.set_stats(AUTH, "d1", ["15", "14", "13", "12", "10", "8"])
+    )
+
+    assert result["stats"] == {"strength": 15}
+    call = rabbit.calls[0]
+    assert call["message_type"] == MessageType.CHARACTER_STATS
+    assert call["payload"] == {
+        "draft_id": "d1",
+        "values": ["15", "14", "13", "12", "10", "8"],
+    }
+
+
+def test_stats_backend_rejection_raises_character_creation_error():
+    service, _ = _service(
+        payload={"ok": False, "error": "You must spend exactly 27 points!"}
+    )
+
+    with pytest.raises(CharacterCreationError) as exc_info:
+        asyncio.run(service.generate_stats(AUTH, "d1", "random"))
+    assert str(exc_info.value) == "You must spend exactly 27 points!"
+
+
+def test_stats_response_without_stats_raises_character_creation_error():
+    service, _ = _service(payload={"ok": True, "modifiers": {}})
+
+    with pytest.raises(CharacterCreationError):
+        asyncio.run(service.set_stats(AUTH, "d1", ["15"] * 6))
+
+
+def test_stats_transport_failure_raises_backend_unavailable():
+    service, _ = _service(error=ConnectionError("broker down"))
+
+    with pytest.raises(BackendUnavailableError):
+        asyncio.run(service.generate_stats(AUTH, "d1", "standard"))

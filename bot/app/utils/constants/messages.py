@@ -29,3 +29,15 @@ CHARACTER_SUMMARY_HINT_TEXT = (
     "Base identity is already saved. "
     "Use /back to revise a value or /cancel to discard the draft."
 )
+CHARACTER_STATS_METHOD_HINT_TEXT = (
+    "Choose a stats generation method with the buttons above, "
+    "or use /back to return to the previous step."
+)
+CHARACTER_STATS_FORMAT_TEXT = (
+    "Please send exactly six numbers separated by spaces or commas, "
+    "for example:\n"
+    "15 14 13 12 10 8"
+)
+CHARACTER_STATS_NONE_TEXT = (
+    "Ability scores are not set yet. Generate or enter them first."
+)

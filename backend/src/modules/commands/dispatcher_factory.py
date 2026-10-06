@@ -59,6 +59,14 @@ def build_bot_command_dispatcher(
             max_age_seconds,
         ),
     )
+    dispatcher.register(
+        MessageType.CHARACTER_STATS,
+        _require_authenticated(
+            _handle_draft_stats(producer, draft_service_scope),
+            secret,
+            max_age_seconds,
+        ),
+    )
     return dispatcher
 
 
@@ -116,13 +124,21 @@ def _draft_payload(result) -> dict:
     return {"ok": True}
 
 
-async def _draft_call(draft_service_scope, call) -> dict:
+def _stats_payload(result) -> dict:
+    if isinstance(result, dict):
+        return {"ok": True, **result}
+    return {"ok": True}
+
+
+async def _draft_call(
+    draft_service_scope, call, payload_builder=_draft_payload
+) -> dict:
     try:
         async with draft_service_scope() as service:
             result = await call(service)
     except ServiceError as exc:
         return {"ok": False, "error": str(exc)}
-    return _draft_payload(result)
+    return payload_builder(result)
 
 
 def _handle_draft_create(producer: MessagePublisher, draft_service_scope):
@@ -182,6 +198,35 @@ def _handle_draft_delete(producer: MessagePublisher, draft_service_scope):
         result = await _draft_call(draft_service_scope, call)
         await _publish_response(
             producer, MessageType.CHARACTER_DELETED, envelope, result
+        )
+
+    return handle
+
+
+def _handle_draft_stats(producer: MessagePublisher, draft_service_scope):
+    async def handle(envelope: MessageEnvelope) -> None:
+        user_id = _identity(envelope)[AUTH_USER_ID_HEADER]
+        payload = envelope.payload if isinstance(envelope.payload, dict) else {}
+        draft_id = payload.get("draft_id")
+        method = payload.get("method")
+        values = payload.get("values")
+
+        async def call(service):
+            if not draft_id:
+                raise ServiceError(
+                    msg="Invalid character stats request.", code=422
+                )
+            if method is not None:
+                return await service.generate_stats(user_id, draft_id, method)
+            if values is not None:
+                return await service.set_stats(user_id, draft_id, values)
+            raise ServiceError(
+                msg="Invalid character stats request.", code=422
+            )
+
+        result = await _draft_call(draft_service_scope, call, _stats_payload)
+        await _publish_response(
+            producer, MessageType.CHARACTER_STATS_CHANGED, envelope, result
         )
 
     return handle

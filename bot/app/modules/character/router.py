@@ -5,10 +5,16 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from app.modules.character.keyboards import (
     CALLBACK_BACK,
     CALLBACK_CANCEL,
+    CALLBACK_CONFIRM,
+    CALLBACK_EDIT,
     CALLBACK_GENERATE,
     CALLBACK_MANUAL,
+    CALLBACK_METHOD,
+    CALLBACK_REGEN,
     CALLBACK_SET,
     navigation_keyboard,
+    stats_keyboard,
+    stats_method_keyboard,
     step_keyboard,
 )
 from app.modules.character.service import (
@@ -18,6 +24,10 @@ from app.modules.character.service import (
 )
 from app.modules.character.states import CharacterCreationStates
 from app.modules.character.steps import (
+    STATS_ABBREVIATIONS,
+    STATS_FIELDS,
+    STATS_GENERATOR_METHODS,
+    STATS_METHODS,
     STEPS,
     WizardStep,
     next_position,
@@ -25,6 +35,9 @@ from app.modules.character.steps import (
     previous_position,
     prompt_for,
     state_for_position,
+    stats_entry_prompt,
+    stats_method_label,
+    stats_method_prompt,
     step_for_position,
 )
 from app.utils.constants import (
@@ -36,6 +49,9 @@ from app.utils.constants import (
     CHARACTER_MANUAL_HINT_TEXT,
     CHARACTER_NOT_STARTED_TEXT,
     CHARACTER_STALE_TEXT,
+    CHARACTER_STATS_FORMAT_TEXT,
+    CHARACTER_STATS_METHOD_HINT_TEXT,
+    CHARACTER_STATS_NONE_TEXT,
     CHARACTER_SUMMARY_HINT_TEXT,
     CHARACTER_TOO_LONG_TEXT,
     CHARACTER_UNAVAILABLE_TEXT,
@@ -44,42 +60,112 @@ from app.utils.constants import (
 MAX_INPUT_LENGTH = 1000
 
 
-def _summary_text(draft: dict) -> str:
-    data = draft.get("data") or {}
-    name = data.get("name") or "-"
-    kind = data.get("kind") or "-"
-    spec_class = data.get("spec_class") or "-"
-    return (
-        "Base identity is saved:\n"
-        f"Name: {name}\n"
-        f"Race: {kind}\n"
-        f"Class: {spec_class}\n\n"
+def _modifier_text(modifier) -> str:
+    if not isinstance(modifier, int) or isinstance(modifier, bool):
+        return "-"
+    return f"+{modifier}" if modifier >= 0 else str(modifier)
+
+
+def _stats_lines(stats: dict, modifiers: dict) -> list[str]:
+    lines = []
+    for field in STATS_FIELDS:
+        value = stats.get(field)
+        if value is None:
+            continue
+        abbreviation = STATS_ABBREVIATIONS[field]
+        modifier = _modifier_text(modifiers.get(field))
+        lines.append(f"{abbreviation} {value} ({modifier})")
+    return lines
+
+
+def _stats_view_text(result: dict, method: str | None) -> str:
+    stats = result.get("stats") or {}
+    modifiers = result.get("modifiers") or {}
+    lines = [f"Ability scores ({stats_method_label(method)}):"]
+    lines.extend(_stats_lines(stats, modifiers))
+    lines.append("")
+    lines.append("Type six new values to edit, or use the buttons below.")
+    return "\n".join(lines)
+
+
+def _summary_text(data: dict) -> str:
+    draft = data.get("draft_data") or {}
+    name = draft.get("name") or "-"
+    kind = draft.get("kind") or "-"
+    spec_class = draft.get("spec_class") or "-"
+    lines = [
+        "Base identity is saved:",
+        f"Name: {name}",
+        f"Race: {kind}",
+        f"Class: {spec_class}",
+    ]
+    result = data.get("stats_result")
+    if isinstance(result, dict):
+        stats = result.get("stats") or {}
+        modifiers = result.get("modifiers") or {}
+        lines.append("")
+        lines.append(
+            f"Ability scores ({stats_method_label(data.get('stats_method'))}):"
+        )
+        lines.extend(_stats_lines(stats, modifiers))
+    lines.append("")
+    lines.append(
         "The draft is stored on the server. "
         "Use /back to revise a value or /cancel to discard it."
     )
+    return "\n".join(lines)
 
 
-async def _wizard_context(state) -> tuple[dict, str, WizardStep] | None:
+async def _base_context(state) -> tuple[dict, str] | None:
     data = await state.get_data()
     auth = data.get("auth")
     draft_id = data.get("draft_id")
-    step = step_for_position(position_for_state(state.state))
-    if not auth or not draft_id or step is None:
+    if not auth or not draft_id:
         return None
+    return auth, draft_id
+
+
+async def _wizard_context(state) -> tuple[dict, str, WizardStep] | None:
+    base = await _base_context(state)
+    if base is None:
+        return None
+    step = step_for_position(position_for_state(await state.get_state()))
+    if step is None:
+        return None
+    auth, draft_id = base
     return auth, draft_id, step
 
 
+async def _position_reply(
+    state, position: str
+) -> tuple[str, InlineKeyboardMarkup | None]:
+    if position == "summary":
+        return _summary_text(await state.get_data()), navigation_keyboard()
+    step = step_for_position(position)
+    if step is not None:
+        return prompt_for(step), step_keyboard(step)
+    if position == "stats_method":
+        return stats_method_prompt(), stats_method_keyboard()
+    data = await state.get_data()
+    result = data.get("stats_result")
+    method = data.get("stats_method")
+    if isinstance(result, dict):
+        return _stats_view_text(result, method), stats_keyboard(method, True)
+    return stats_entry_prompt(), stats_keyboard(method, False)
+
+
 async def _advance(target, state, step: WizardStep, draft: dict) -> None:
+    await state.update_data(draft_data=draft.get("data") or {})
     position = next_position(step.position)
-    next_step = step_for_position(position)
-    if position is None or next_step is None:
+    if position is None or position == "summary":
         await state.set_state(state_for_position("summary"))
-        await target.answer(_summary_text(draft), reply_markup=navigation_keyboard())
+        await target.answer(
+            _summary_text(await state.get_data()), reply_markup=navigation_keyboard()
+        )
         return
+    text, reply_markup = await _position_reply(state, position)
     await state.set_state(state_for_position(position))
-    await target.answer(
-        prompt_for(next_step), reply_markup=step_keyboard(next_step)
-    )
+    await target.answer(text, reply_markup=reply_markup)
 
 
 async def _submit_value(
@@ -144,7 +230,9 @@ async def handle_create(
         return
     first_step = STEPS[0]
     await state.set_state(state_for_position(first_step.position))
-    await state.update_data(draft_id=draft.get("id"))
+    await state.update_data(
+        draft_id=draft.get("id"), draft_data=draft.get("data") or {}
+    )
     await message.answer(
         prompt_for(first_step), reply_markup=step_keyboard(first_step)
     )
@@ -168,6 +256,46 @@ async def handle_step_input(
     await _submit_value(message, state, creation_service, auth, draft_id, step, text)
 
 
+async def handle_stats_method_input(message: Message, state) -> None:
+    await message.answer(CHARACTER_STATS_METHOD_HINT_TEXT)
+
+
+async def handle_stats_input(
+    message: Message, state, creation_service: CharacterCreationService
+) -> None:
+    context = await _base_context(state)
+    if context is None:
+        await message.answer(CHARACTER_NOT_STARTED_TEXT)
+        return
+    auth, draft_id = context
+    text = (message.text or "").strip()
+    if not text:
+        await message.answer(CHARACTER_EMPTY_INPUT_TEXT)
+        return
+    if len(text) > MAX_INPUT_LENGTH:
+        await message.answer(CHARACTER_TOO_LONG_TEXT)
+        return
+    values = text.replace(",", " ").split()
+    if len(values) != 6:
+        await message.answer(CHARACTER_STATS_FORMAT_TEXT)
+        return
+    try:
+        result = await creation_service.set_stats(auth, draft_id, values)
+    except CharacterCreationError as exc:
+        await message.answer(str(exc))
+        return
+    except BackendUnavailableError:
+        await message.answer(CHARACTER_UNAVAILABLE_TEXT)
+        return
+    data = await state.get_data()
+    method = data.get("stats_method")
+    await state.update_data(stats_result=result)
+    await message.answer(
+        _stats_view_text(result, method),
+        reply_markup=stats_keyboard(method, True),
+    )
+
+
 async def handle_summary_input(message: Message, state) -> None:
     await message.answer(CHARACTER_SUMMARY_HINT_TEXT)
 
@@ -176,17 +304,15 @@ async def _back_reply(state) -> tuple[str, InlineKeyboardMarkup | None]:
     data = await state.get_data()
     if not data.get("draft_id"):
         return CHARACTER_NOT_STARTED_TEXT, None
-    position = position_for_state(state.state)
+    position = position_for_state(await state.get_state())
     if position is None:
         return CHARACTER_NOT_STARTED_TEXT, None
     previous = previous_position(position)
     if previous is None:
         return CHARACTER_FIRST_STEP_TEXT, None
-    previous_step = step_for_position(previous)
-    if previous_step is None:
-        return CHARACTER_FIRST_STEP_TEXT, None
+    text, reply_markup = await _position_reply(state, previous)
     await state.set_state(state_for_position(previous))
-    return prompt_for(previous_step), step_keyboard(previous_step)
+    return text, reply_markup
 
 
 async def handle_back(message: Message, state) -> None:
@@ -220,6 +346,115 @@ async def handle_cancel(
     await _cancel(message, state, creation_service)
 
 
+async def _choose_method(
+    callback: CallbackQuery,
+    state,
+    creation_service: CharacterCreationService,
+    method: str,
+) -> None:
+    if method not in STATS_METHODS:
+        await callback.answer(CHARACTER_STALE_TEXT, show_alert=True)
+        return
+    context = await _base_context(state)
+    if context is None:
+        await callback.answer(CHARACTER_NOT_STARTED_TEXT, show_alert=True)
+        return
+    if position_for_state(await state.get_state()) != "stats_method":
+        await callback.answer(CHARACTER_STALE_TEXT, show_alert=True)
+        return
+    auth, draft_id = context
+    if method == "manual":
+        await state.update_data(stats_method="manual")
+        await state.set_state(state_for_position("stats"))
+        text, reply_markup = await _position_reply(state, "stats")
+        await callback.answer()
+        await callback.message.answer(text, reply_markup=reply_markup)
+        return
+    try:
+        result = await creation_service.generate_stats(auth, draft_id, method)
+    except CharacterCreationError as exc:
+        await callback.answer()
+        await callback.message.answer(str(exc))
+        return
+    except BackendUnavailableError:
+        await callback.answer()
+        await callback.message.answer(CHARACTER_UNAVAILABLE_TEXT)
+        return
+    await state.update_data(stats_method=method, stats_result=result)
+    await state.set_state(state_for_position("stats"))
+    await callback.answer()
+    await callback.message.answer(
+        _stats_view_text(result, method), reply_markup=stats_keyboard(method, True)
+    )
+
+
+async def _regenerate(
+    callback: CallbackQuery,
+    state,
+    creation_service: CharacterCreationService,
+) -> None:
+    context = await _base_context(state)
+    if context is None:
+        await callback.answer(CHARACTER_NOT_STARTED_TEXT, show_alert=True)
+        return
+    if position_for_state(await state.get_state()) != "stats":
+        await callback.answer(CHARACTER_STALE_TEXT, show_alert=True)
+        return
+    data = await state.get_data()
+    method = data.get("stats_method")
+    if method not in STATS_GENERATOR_METHODS:
+        await callback.answer(CHARACTER_STALE_TEXT, show_alert=True)
+        return
+    auth, draft_id = context
+    try:
+        result = await creation_service.generate_stats(auth, draft_id, method)
+    except CharacterCreationError as exc:
+        await callback.answer()
+        await callback.message.answer(str(exc))
+        return
+    except BackendUnavailableError:
+        await callback.answer()
+        await callback.message.answer(CHARACTER_UNAVAILABLE_TEXT)
+        return
+    await state.update_data(stats_result=result)
+    await callback.answer()
+    await callback.message.answer(
+        _stats_view_text(result, method), reply_markup=stats_keyboard(method, True)
+    )
+
+
+async def _edit_values(callback: CallbackQuery, state) -> None:
+    data = await state.get_data()
+    if position_for_state(await state.get_state()) != "stats" or not data.get("draft_id"):
+        await callback.answer(CHARACTER_STALE_TEXT, show_alert=True)
+        return
+    await callback.answer()
+    await callback.message.answer(
+        stats_entry_prompt(),
+        reply_markup=stats_keyboard(
+            data.get("stats_method"), bool(data.get("stats_result"))
+        ),
+    )
+
+
+async def _confirm_stats(callback: CallbackQuery, state) -> None:
+    data = await state.get_data()
+    if not data.get("draft_id") or not data.get("auth"):
+        await callback.answer(CHARACTER_NOT_STARTED_TEXT, show_alert=True)
+        return
+    if position_for_state(await state.get_state()) != "stats":
+        await callback.answer(CHARACTER_STALE_TEXT, show_alert=True)
+        return
+    if not isinstance(data.get("stats_result"), dict):
+        await callback.answer(CHARACTER_STATS_NONE_TEXT, show_alert=True)
+        return
+    await state.set_state(state_for_position("summary"))
+    await callback.answer()
+    await callback.message.answer(
+        _summary_text(data), reply_markup=navigation_keyboard()
+    )
+
+
 async def handle_callback(
     callback: CallbackQuery, state, creation_service: CharacterCreationService
 ) -> None:
@@ -232,6 +467,19 @@ async def handle_callback(
     if raw == CALLBACK_CANCEL:
         await callback.answer()
         await _cancel(callback.message, state, creation_service)
+        return
+    if raw.startswith(f"{CALLBACK_METHOD}:"):
+        method = raw.removeprefix(f"{CALLBACK_METHOD}:")
+        await _choose_method(callback, state, creation_service, method)
+        return
+    if raw == CALLBACK_REGEN:
+        await _regenerate(callback, state, creation_service)
+        return
+    if raw == CALLBACK_CONFIRM:
+        await _confirm_stats(callback, state)
+        return
+    if raw == CALLBACK_EDIT:
+        await _edit_values(callback, state)
         return
     if raw.startswith(f"{CALLBACK_MANUAL}:"):
         await callback.answer(CHARACTER_MANUAL_HINT_TEXT)
@@ -286,6 +534,12 @@ def build_character_creation_router() -> Router:
             CharacterCreationStates.race,
             CharacterCreationStates.spec_class,
         ),
+    )
+    router.message.register(
+        handle_stats_method_input, CharacterCreationStates.stats_method
+    )
+    router.message.register(
+        handle_stats_input, CharacterCreationStates.stats
     )
     router.message.register(
         handle_summary_input, CharacterCreationStates.summary

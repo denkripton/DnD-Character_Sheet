@@ -9,8 +9,10 @@ class MessageType(str, Enum):
     CHARACTER_GENERATE_BACKSTORY = "character.generate_backstory.command"
     CHARACTER_UPDATE_PARAMETER = "character.update_parameter.command"
     CHARACTER_DELETE = "character.delete.command"
+    CHARACTER_STATS = "character.stats.command"
 
     CHARACTER_CREATED = "character.created.event"
     CHARACTER_UPDATED = "character.updated.event"
     CHARACTER_GENERATED = "character.generated.event"
     CHARACTER_DELETED = "character.deleted.event"
+    CHARACTER_STATS_CHANGED = "character.stats_changed.event"

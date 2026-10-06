@@ -269,3 +269,280 @@ def test_delete_other_user_draft_raises():
         assert len(service.draft_repo.rows) == 1
 
     asyncio.run(flow())
+
+
+STANDARD_VALUES = [15, 14, 13, 12, 10, 8]
+STANDARD_STATS = {
+    "strength": 15,
+    "dexterity": 14,
+    "constitution": 13,
+    "intelligence": 12,
+    "wisdom": 10,
+    "charisma": 8,
+}
+STANDARD_MODIFIERS = {
+    "strength": 2,
+    "dexterity": 2,
+    "constitution": 1,
+    "intelligence": 1,
+    "wisdom": 0,
+    "charisma": -1,
+}
+
+
+def _fixed_stats_generation(name, values):
+    return patch(
+        f"src.modules.character.draft.service.{name}",
+        return_value=list(values),
+    )
+
+
+def test_generate_stats_standard_array_persists_and_returns_modifiers():
+    service, draft_repo, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        result = await service.generate_stats("user-1", draft.id, "standard")
+
+        assert result["stats"] == STANDARD_STATS
+        assert result["modifiers"] == STANDARD_MODIFIERS
+        assert draft_repo.rows[0].data["stats"] == STANDARD_STATS
+
+    asyncio.run(flow())
+
+
+def test_generate_stats_random_uses_domain_generator():
+    service, draft_repo, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        with _fixed_stats_generation("generate_random_stats", [16, 15, 14, 13, 12, 9]):
+            result = await service.generate_stats("user-1", draft.id, "random")
+
+        assert result["stats"]["strength"] == 16
+        assert result["modifiers"]["strength"] == 3
+        assert draft_repo.rows[0].data["stats"]["strength"] == 16
+
+    asyncio.run(flow())
+
+
+def test_generate_stats_point_buy_uses_domain_generator():
+    service, draft_repo, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        with _fixed_stats_generation("generate_point_buy_stats", STANDARD_VALUES):
+            result = await service.generate_stats("user-1", draft.id, "point_buy")
+
+        assert result["stats"] == STANDARD_STATS
+        assert draft_repo.rows[0].data["stats"] == STANDARD_STATS
+
+    asyncio.run(flow())
+
+
+def test_generate_stats_rejects_unsupported_method():
+    service, _, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        with pytest.raises(ServiceError) as exc_info:
+            await service.generate_stats("user-1", draft.id, "luck")
+        assert exc_info.value.status_code == 422
+        assert (
+            str(exc_info.value)
+            == "Unsupported stats generation method: luck."
+        )
+        assert service.draft_repo.rows[0].data == {}
+
+    asyncio.run(flow())
+
+
+def test_generate_stats_other_user_draft_raises():
+    service, _, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        with pytest.raises(ServiceError) as exc_info:
+            await service.generate_stats("user-2", draft.id, "standard")
+        assert "not found" in str(exc_info.value)
+
+    asyncio.run(flow())
+
+
+def test_set_stats_persists_values_and_returns_modifiers():
+    service, draft_repo, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        result = await service.set_stats(
+            "user-1", draft.id, ["15", "14", "13", "12", "10", "8"]
+        )
+
+        assert result["stats"] == STANDARD_STATS
+        assert result["modifiers"] == STANDARD_MODIFIERS
+        assert draft_repo.rows[0].data["stats"] == STANDARD_STATS
+
+    asyncio.run(flow())
+
+
+def test_set_stats_accepts_integer_values():
+    service, _, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        result = await service.set_stats(
+            "user-1", draft.id, STANDARD_VALUES
+        )
+        assert result["stats"] == STANDARD_STATS
+
+    asyncio.run(flow())
+
+
+def test_set_stats_preserves_existing_draft_fields():
+    service, draft_repo, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        await service.update_parameter("user-1", draft.id, "name", "Aria")
+        await service.set_stats("user-1", draft.id, STANDARD_VALUES)
+
+        assert draft_repo.rows[0].data["name"] == "Aria"
+        assert draft_repo.rows[0].data["stats"] == STANDARD_STATS
+
+    asyncio.run(flow())
+
+
+def test_set_stats_rejects_wrong_count():
+    service, _, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        with pytest.raises(ServiceError) as exc_info:
+            await service.set_stats("user-1", draft.id, ["15", "14", "13"])
+        assert exc_info.value.status_code == 422
+        assert (
+            str(exc_info.value)
+            == "Enter exactly six values in order: STR DEX CON INT WIS CHA."
+        )
+        assert service.draft_repo.rows[0].data == {}
+
+    asyncio.run(flow())
+
+
+def test_set_stats_rejects_non_numeric_values():
+    service, _, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        with pytest.raises(ServiceError) as exc_info:
+            await service.set_stats(
+                "user-1", draft.id, ["strong", "14", "13", "12", "10", "8"]
+            )
+        assert str(exc_info.value) == "Stats must be whole numbers."
+
+    asyncio.run(flow())
+
+
+def test_set_stats_rejects_values_below_minimum():
+    service, _, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        with pytest.raises(ServiceError) as exc_info:
+            await service.set_stats(
+                "user-1", draft.id, ["7", "14", "13", "12", "10", "8"]
+            )
+        assert str(exc_info.value) == "Each stat must be between 8 and 15."
+
+    asyncio.run(flow())
+
+
+def test_set_stats_rejects_values_above_maximum():
+    service, _, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        with pytest.raises(ServiceError) as exc_info:
+            await service.set_stats(
+                "user-1", draft.id, ["16", "14", "13", "12", "10", "8"]
+            )
+        assert str(exc_info.value) == "Each stat must be between 8 and 15."
+
+    asyncio.run(flow())
+
+
+def test_set_stats_rejects_overspent_point_buy():
+    service, _, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        with pytest.raises(ServiceError) as exc_info:
+            await service.set_stats(
+                "user-1", draft.id, ["15", "15", "15", "10", "8", "8"]
+            )
+        assert exc_info.value.status_code == 422
+        assert (
+            str(exc_info.value)
+            == "You must spend exactly 27 points! Spent: 29/27."
+        )
+        assert service.draft_repo.rows[0].data == {}
+
+    asyncio.run(flow())
+
+
+def test_set_stats_rejects_underspent_point_buy():
+    service, _, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        with pytest.raises(ServiceError) as exc_info:
+            await service.set_stats(
+                "user-1", draft.id, ["8", "8", "8", "8", "8", "8"]
+            )
+        assert (
+            str(exc_info.value)
+            == "You must spend exactly 27 points! Spent: 0/27."
+        )
+
+    asyncio.run(flow())
+
+
+def test_set_stats_other_user_draft_raises():
+    service, _, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        with pytest.raises(ServiceError) as exc_info:
+            await service.set_stats("user-2", draft.id, STANDARD_VALUES)
+        assert "not found" in str(exc_info.value)
+        assert service.draft_repo.rows[0].data == {}
+
+    asyncio.run(flow())
+
+
+def test_set_stats_missing_draft_raises():
+    service, _, _ = _service()
+
+    async def flow():
+        with pytest.raises(ServiceError) as exc_info:
+            await service.set_stats("user-1", "not-a-uuid", STANDARD_VALUES)
+        assert "not found" in str(exc_info.value)
+
+    asyncio.run(flow())
+
+
+def test_stats_then_parameters_keep_both_in_draft():
+    service, draft_repo, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        await service.set_stats("user-1", draft.id, STANDARD_VALUES)
+        draft = await service.update_parameter(
+            "user-1", draft.id, "spec_class", "Wizard"
+        )
+
+        assert draft.data["stats"] == STANDARD_STATS
+        assert draft.data["spec_class"] == "Wizard"
+        assert draft_repo.rows[0].data == draft.data
+
+    asyncio.run(flow())

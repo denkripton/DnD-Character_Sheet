@@ -304,3 +304,205 @@ def test_unsigned_command_with_secret_rejected():
 
     with pytest.raises(MessageAuthenticationError):
         asyncio.run(dispatcher.handle(command))
+
+
+STANDARD_VALUES = ["15", "14", "13", "12", "10", "8"]
+STANDARD_STATS = {
+    "strength": 15,
+    "dexterity": 14,
+    "constitution": 13,
+    "intelligence": 12,
+    "wisdom": 10,
+    "charisma": 8,
+}
+STANDARD_MODIFIERS = {
+    "strength": 2,
+    "dexterity": 2,
+    "constitution": 1,
+    "intelligence": 1,
+    "wisdom": 0,
+    "charisma": -1,
+}
+
+
+def test_character_stats_generate_command_persists_stats():
+    dispatcher, producer, draft_repo = _environment()
+    draft_id = _create_draft(dispatcher, producer)
+
+    command = _command(
+        MessageType.CHARACTER_STATS,
+        {"draft_id": draft_id, "method": "standard"},
+    )
+    asyncio.run(dispatcher.handle(command))
+
+    event, routing_key = _published(producer)
+    assert event.type == MessageType.CHARACTER_STATS_CHANGED.value
+    assert routing_key == "events.character.stats_changed"
+    assert event.payload["ok"] is True
+    assert event.payload["stats"] == STANDARD_STATS
+    assert event.payload["modifiers"] == STANDARD_MODIFIERS
+    assert draft_repo.rows[0].data["stats"] == STANDARD_STATS
+
+
+def test_character_stats_generate_random_returns_domain_values():
+    dispatcher, producer, draft_repo = _environment()
+    draft_id = _create_draft(dispatcher, producer)
+
+    command = _command(
+        MessageType.CHARACTER_STATS,
+        {"draft_id": draft_id, "method": "random"},
+    )
+    asyncio.run(dispatcher.handle(command))
+
+    event, _ = _published(producer)
+    assert event.payload["ok"] is True
+    stats = event.payload["stats"]
+    modifiers = event.payload["modifiers"]
+    assert set(stats) == {
+        "strength",
+        "dexterity",
+        "constitution",
+        "intelligence",
+        "wisdom",
+        "charisma",
+    }
+    for value in stats.values():
+        assert 3 <= value <= 18
+    assert modifiers["strength"] == (stats["strength"] - 10) // 2
+    assert draft_repo.rows[0].data["stats"] == stats
+
+
+def test_character_stats_set_command_persists_manual_values():
+    dispatcher, producer, draft_repo = _environment()
+    draft_id = _create_draft(dispatcher, producer)
+
+    command = _command(
+        MessageType.CHARACTER_STATS,
+        {"draft_id": draft_id, "values": STANDARD_VALUES},
+    )
+    asyncio.run(dispatcher.handle(command))
+
+    event, _ = _published(producer)
+    assert event.type == MessageType.CHARACTER_STATS_CHANGED.value
+    assert event.payload["ok"] is True
+    assert event.payload["stats"] == STANDARD_STATS
+    assert event.payload["modifiers"] == STANDARD_MODIFIERS
+    assert draft_repo.rows[0].data["stats"] == STANDARD_STATS
+
+
+def test_character_stats_set_validation_error_is_friendly():
+    dispatcher, producer, _ = _environment()
+    draft_id = _create_draft(dispatcher, producer)
+
+    command = _command(
+        MessageType.CHARACTER_STATS,
+        {"draft_id": draft_id, "values": ["15", "15", "15", "10", "8", "8"]},
+    )
+    asyncio.run(dispatcher.handle(command))
+
+    event, _ = _published(producer)
+    assert event.payload["ok"] is False
+    assert (
+        event.payload["error"]
+        == "You must spend exactly 27 points! Spent: 29/27."
+    )
+
+
+def test_character_stats_missing_draft_id_rejected():
+    dispatcher, producer, _ = _environment()
+    command = _command(
+        MessageType.CHARACTER_STATS, {"method": "standard"}
+    )
+    asyncio.run(dispatcher.handle(command))
+
+    event, _ = _published(producer)
+    assert event.payload == {
+        "ok": False,
+        "error": "Invalid character stats request.",
+    }
+
+
+def test_character_stats_without_method_or_values_rejected():
+    dispatcher, producer, _ = _environment()
+    draft_id = _create_draft(dispatcher, producer)
+    command = _command(MessageType.CHARACTER_STATS, {"draft_id": draft_id})
+    asyncio.run(dispatcher.handle(command))
+
+    event, _ = _published(producer)
+    assert event.payload == {
+        "ok": False,
+        "error": "Invalid character stats request.",
+    }
+
+
+def test_character_stats_unknown_method_rejected():
+    dispatcher, producer, _ = _environment()
+    draft_id = _create_draft(dispatcher, producer)
+
+    command = _command(
+        MessageType.CHARACTER_STATS,
+        {"draft_id": draft_id, "method": "luck"},
+    )
+    asyncio.run(dispatcher.handle(command))
+
+    event, _ = _published(producer)
+    assert event.payload["ok"] is False
+    assert event.payload["error"] == "Unsupported stats generation method: luck."
+
+
+def test_character_stats_other_user_draft_rejected():
+    dispatcher, producer, _ = _environment()
+    draft_id = _create_draft(dispatcher, producer)
+
+    command = _command(
+        MessageType.CHARACTER_STATS,
+        {"draft_id": draft_id, "values": STANDARD_VALUES},
+        headers=_headers("user-2"),
+    )
+    asyncio.run(dispatcher.handle(command))
+
+    event, _ = _published(producer)
+    assert event.payload["ok"] is False
+    assert "not found" in event.payload["error"]
+
+
+def test_character_stats_requires_identity_headers():
+    dispatcher, producer, draft_repo = _environment()
+    command = _command(MessageType.CHARACTER_STATS, headers={})
+
+    with pytest.raises(MessageAuthenticationError):
+        asyncio.run(dispatcher.handle(command))
+    assert draft_repo.rows == []
+    producer.publish.assert_not_awaited()
+
+
+def test_full_wizard_flow_via_commands():
+    dispatcher, producer, draft_repo = _environment()
+    draft_id = _create_draft(dispatcher, producer)
+
+    for parameter, value in [
+        ("name", "Aria"),
+        ("kind", "Elf"),
+        ("spec_class", "Wizard"),
+    ]:
+        command = _command(
+            MessageType.CHARACTER_UPDATE_PARAMETER,
+            {"draft_id": draft_id, "parameter": parameter, "value": value},
+        )
+        asyncio.run(dispatcher.handle(command))
+        event, _ = _published(producer)
+        assert event.payload["ok"] is True
+
+    command = _command(
+        MessageType.CHARACTER_STATS,
+        {"draft_id": draft_id, "method": "standard"},
+    )
+    asyncio.run(dispatcher.handle(command))
+    event, _ = _published(producer)
+    assert event.payload["ok"] is True
+
+    data = draft_repo.rows[0].data
+    assert data["name"] == "Aria"
+    assert data["kind"] == "Elf"
+    assert data["spec_class"] == "Wizard"
+    assert data["stats"] == STANDARD_STATS

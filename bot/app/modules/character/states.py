@@ -5,4 +5,6 @@ class CharacterCreationStates(StatesGroup):
     name = State()
     race = State()
     spec_class = State()
+    stats_method = State()
+    stats = State()
     summary = State()

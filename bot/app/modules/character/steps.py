@@ -2,7 +2,35 @@ from dataclasses import dataclass
 
 from app.modules.character.states import CharacterCreationStates
 
-POSITIONS = ("name", "race", "spec_class", "summary")
+POSITIONS = ("name", "race", "spec_class", "stats_method", "stats", "summary")
+
+STATS_METHODS = ("random", "standard", "point_buy", "manual")
+STATS_GENERATOR_METHODS = ("random", "standard", "point_buy")
+
+STATS_METHOD_LABELS = {
+    "random": "Random (4d6 drop lowest)",
+    "standard": "Standard array",
+    "point_buy": "Point buy",
+    "manual": "Manual",
+}
+
+STATS_FIELDS = (
+    "strength",
+    "dexterity",
+    "constitution",
+    "intelligence",
+    "wisdom",
+    "charisma",
+)
+
+STATS_ABBREVIATIONS = {
+    "strength": "STR",
+    "dexterity": "DEX",
+    "constitution": "CON",
+    "intelligence": "INT",
+    "wisdom": "WIS",
+    "charisma": "CHA",
+}
 
 
 @dataclass(frozen=True)
@@ -47,12 +75,43 @@ STEPS: tuple[WizardStep, ...] = (
 )
 
 
+def stage_total() -> int:
+    return len(POSITIONS) - 1
+
+
+def position_index(position: str) -> int:
+    return POSITIONS.index(position) + 1
+
+
 def step_index(step: WizardStep) -> int:
-    return STEPS.index(step) + 1
+    return position_index(step.position)
 
 
 def prompt_for(step: WizardStep) -> str:
-    return step.prompt.format(index=step_index(step), total=len(STEPS))
+    return step.prompt.format(index=step_index(step), total=stage_total())
+
+
+def stats_method_prompt() -> str:
+    return (
+        f"Step {position_index('stats_method')}/{stage_total()}"
+        " - Stats generation method\n"
+        "Choose how to assign ability scores:\n"
+        "/back - previous step, /cancel - abort"
+    )
+
+
+def stats_entry_prompt() -> str:
+    return (
+        f"Step {position_index('stats')}/{stage_total()} - Ability scores\n"
+        "Type six values in order (STR DEX CON INT WIS CHA),\n"
+        "each from 8 to 15, spending exactly 27 points, for example:\n"
+        "15 14 13 12 10 8\n"
+        "/back - previous step, /cancel - abort"
+    )
+
+
+def stats_method_label(method: str | None) -> str:
+    return STATS_METHOD_LABELS.get(method or "", "Manual")
 
 
 def state_for_position(position: str):

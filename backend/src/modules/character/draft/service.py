@@ -6,6 +6,14 @@ from src.modules.character.base.schemas import CharacterUpdateSchema
 from src.modules.character.draft.schemas import CharacterDraftReadSchema
 from src.modules.character.models import CharacterDraft
 from src.modules.character.repositories import CharacterDraftRepository
+from src.modules.character.stats.schemas import StatsCreateSchema
+from src.modules.character.utils import (
+    assign_stats,
+    compute_modifiers,
+    generate_point_buy_stats,
+    generate_random_stats,
+    generate_standard_array,
+)
 from src.modules.character.utils.random_character import generate_random_character
 from src.utils.exceptions import ServiceError
 from src.utils.unit_of_work import UnitOfWork
@@ -41,6 +49,37 @@ def friendly_validation_message(exc: ValidationError) -> str:
     if error_type == "missing":
         return f"{label} is required."
     return f"{label}: {error.get('msg', 'is invalid')}."
+
+
+def _parse_stats_values(values) -> dict:
+    if not isinstance(values, (list, tuple)) or len(values) != 6:
+        raise ServiceError(
+            msg="Enter exactly six values in order: STR DEX CON INT WIS CHA.",
+            code=422,
+        )
+    parsed = []
+    for value in values:
+        try:
+            parsed.append(int(str(value).strip()))
+        except (TypeError, ValueError) as exc:
+            raise ServiceError(msg="Stats must be whole numbers.", code=422) from exc
+    return assign_stats(parsed)
+
+
+def _stats_error_message(exc: ValidationError) -> str:
+    error = exc.errors()[0]
+    error_type = error.get("type")
+    if error_type in ("greater_than_equal", "less_than_equal"):
+        return "Each stat must be between 8 and 15."
+    if error_type == "value_error":
+        message = str(error.get("msg", ""))
+        message = message.removeprefix("Value error, ")
+        return message
+    if error_type == "int_type":
+        return "Stats must be whole numbers."
+    if error_type == "missing":
+        return "All six stats are required."
+    return str(error.get("msg", "Stats are invalid."))
 
 
 class CharacterDraftService:
@@ -127,3 +166,34 @@ class CharacterDraftService:
         draft = await self._get_owned(user_id, draft_id)
         await self.draft_repo.delete_obj(draft.id)
         await self.uow.commit()
+
+    async def generate_stats(self, user_id: str, draft_id, method: str) -> dict:
+        draft = await self._get_owned(user_id, draft_id)
+        if method == "standard":
+            generated = generate_standard_array()
+        elif method == "point_buy":
+            generated = generate_point_buy_stats()
+        elif method == "random":
+            generated = generate_random_stats()
+        else:
+            raise ServiceError(
+                msg=f"Unsupported stats generation method: {method}.", code=422
+            )
+        stats_dict = assign_stats(generated)
+        await self._store_stats(draft, stats_dict)
+        return {"stats": stats_dict, "modifiers": compute_modifiers(stats_dict)}
+
+    async def set_stats(self, user_id: str, draft_id, values) -> dict:
+        draft = await self._get_owned(user_id, draft_id)
+        stats_dict = _parse_stats_values(values)
+        try:
+            StatsCreateSchema(**stats_dict)
+        except ValidationError as exc:
+            raise ServiceError(msg=_stats_error_message(exc), code=422) from exc
+        await self._store_stats(draft, stats_dict)
+        return {"stats": stats_dict, "modifiers": compute_modifiers(stats_dict)}
+
+    async def _store_stats(self, draft: CharacterDraft, stats_dict: dict) -> None:
+        draft.data = {**(draft.data or {}), "stats": stats_dict}
+        await self.uow.commit()
+        await self.uow.refresh(draft)
