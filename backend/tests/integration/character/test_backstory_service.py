@@ -5,8 +5,6 @@ CHAR_ID = uuid.uuid4()
 
 import pytest
 from pydantic import ValidationError
-
-from src.utils.exceptions import ServiceError
 from src.modules.character.backstory.schemas import BackstoryCreateSchema
 from src.modules.character.backstory.service import BackstoryService
 from src.modules.character.models import (
@@ -20,16 +18,24 @@ from src.modules.character.models import (
     Skill,
     Stat,
 )
+from src.utils.exceptions import AIProviderRateLimitError, ServiceError
 from tests.utils import FakeRepo, FakeUnitOfWork, build_guard, build_owned_character
 
 
 class FakeAI:
-    def __init__(self, text="A wandering hero seeks an ancient artifact."):
+    def __init__(
+        self,
+        text="A wandering hero seeks an ancient artifact.",
+        error=None,
+    ):
         self.text = text
+        self.error = error
         self.calls = []
 
-    async def generate(self, prompt, model=None):
-        self.calls.append({"prompt": prompt, "model": model})
+    async def generate(self, prompt, model=None, provider=None):
+        self.calls.append({"prompt": prompt, "model": model, "provider": provider})
+        if self.error is not None:
+            raise self.error
         return self.text
 
 
@@ -38,14 +44,14 @@ class DummyUser:
         self.id = id
 
 
-def _build(text="A wandering hero seeks an ancient artifact."):
+def _build(text="A wandering hero seeks an ancient artifact.", error=None):
     user_repo = FakeRepo(model=DummyUser)
     character_repo = FakeRepo(model=Character)
     guard = build_guard(character_repo, user_repo, "user-1")
     character = build_owned_character(character_repo, CHAR_ID)
     character.background = "Soldier"
 
-    ai = FakeAI(text=text)
+    ai = FakeAI(text=text, error=error)
     uow = FakeUnitOfWork()
     service = BackstoryService(
         ownership_guard=guard,
@@ -148,6 +154,37 @@ def test_generate_backstory_delegates_default_model_choice():
     async def flow():
         await service.generate_backstory(user_id, char_id)
         assert ai.calls[0]["model"] is None
+        assert ai.calls[0]["provider"] is None
+
+    asyncio.run(flow())
+
+
+def test_generate_backstory_forwards_provider_selection():
+    service, user_id, char_id, ai = _build()
+
+    async def flow():
+        await service.generate_backstory(
+            user_id,
+            char_id,
+            model="gemini-2.5-pro",
+            provider="gemini",
+        )
+        assert ai.calls[0]["model"] == "gemini-2.5-pro"
+        assert ai.calls[0]["provider"] == "gemini"
+
+    asyncio.run(flow())
+
+
+def test_generate_backstory_provider_error_propagates():
+    service, user_id, char_id, _ = _build(
+        error=AIProviderRateLimitError("gemini rate limit exceeded", provider="gemini")
+    )
+
+    async def flow():
+        with pytest.raises(AIProviderRateLimitError) as exc_info:
+            await service.generate_backstory(user_id, char_id)
+        assert exc_info.value.message == "gemini rate limit exceeded"
+        assert exc_info.value.provider == "gemini"
 
     asyncio.run(flow())
 

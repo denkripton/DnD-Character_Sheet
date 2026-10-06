@@ -1,7 +1,6 @@
 from fastapi import Depends
-
 from src.dependencies import get_unit_of_work
-from src.modules.ai import AIGateway, get_ai_client
+from src.modules.ai import AIService, get_ai_service
 from src.modules.character.backstory.service import BackstoryService
 from src.modules.character.dependencies import (
     backstory_repository,
@@ -31,7 +30,7 @@ from src.utils.unit_of_work import UnitOfWork
 def get_backstory_service(
     ownership: CharacterOwnershipGuard = Depends(character_ownership_guard),
     backstory_repo: BackstoryRepository = Depends(backstory_repository),
-    ai_client: AIGateway = Depends(get_ai_client),
+    ai_client: AIService = Depends(get_ai_service),
     stats_repo: StatsRepository = Depends(stats_repository),
     combat_repo: CombatRepository = Depends(combat_repository),
     personality_repo: PersonalityRepository = Depends(personality_repository),

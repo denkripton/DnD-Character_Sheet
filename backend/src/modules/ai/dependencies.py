@@ -1,20 +1,19 @@
-from fastapi import Depends
-
 from src.config import settings
-from src.utils.exceptions import ServiceError
-from src.modules.ai.client import AIGateway
-from src.modules.ai.gateway import GeminiGateway
-from src.modules.ai.models import MODEL_PROVIDER, get_default_model
+from src.modules.ai.enums import AIProviderDefaults
+from src.modules.ai.registry import AIProviderRegistry
+from src.modules.ai.service import AIService
 
 
-def get_ai_client() -> AIGateway:
-    if not settings.GEMINI_API_KEY:
-        raise ServiceError(code=422, msg="Gemini API key is not configured")
-    return AIGateway(
-        model_provider=MODEL_PROVIDER,
-        providers={"gemini": GeminiGateway(api_key=settings.GEMINI_API_KEY)},
-        default_model=get_default_model(),
+def get_ai_registry() -> AIProviderRegistry:
+    from src.infrastructure.ai import build_ai_providers
+
+    providers = build_ai_providers()
+    return AIProviderRegistry(
+        providers=providers,
+        default_model=settings.DEFAULT_AI_MODEL,
+        preferred_provider=AIProviderDefaults.DEFAULT_PROVIDER.value,
     )
 
 
-__all__ = ["get_ai_client"]
+def get_ai_service() -> AIService:
+    return AIService(registry=get_ai_registry())

@@ -1,12 +1,10 @@
-from src.utils.exceptions import ServiceError
-from src.modules.ai import AIGateway
+from src.infrastructure.redis import cache
+from src.modules.ai import AIService
 from src.modules.character.backstory.prompt import build_backstory_prompt
 from src.modules.character.backstory.schemas import (
     BackstoryCreateSchema,
     BackstoryReadSchema,
 )
-from src.infrastructure.redis import cache
-from src.utils.unit_of_work import UnitOfWork
 from src.modules.character.repositories import (
     BackstoryRepository,
     CombatRepository,
@@ -18,6 +16,8 @@ from src.modules.character.repositories import (
     StatsRepository,
 )
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
+from src.utils.exceptions import ServiceError
+from src.utils.unit_of_work import UnitOfWork
 
 
 class BackstoryService:
@@ -25,7 +25,7 @@ class BackstoryService:
         self,
         ownership_guard: CharacterOwnershipGuard,
         backstory_repository: BackstoryRepository,
-        ai_client: AIGateway,
+        ai_client: AIService,
         stats_repository: StatsRepository,
         combat_repository: CombatRepository,
         personality_repository: PersonalityRepository,
@@ -123,12 +123,18 @@ class BackstoryService:
             data=data.model_dump(mode="json"),
         )
 
-    async def generate_backstory(self, user_id, character_id, model: str | None = None):
+    async def generate_backstory(
+        self,
+        user_id,
+        character_id,
+        model: str | None = None,
+        provider: str | None = None,
+    ):
         character = await self.ownership.get_owned(user_id, character_id)
 
         context = await self._context(character_id)
         prompt = build_backstory_prompt(character, context)
-        text = await self.ai.generate(prompt, model=model)
+        text = await self.ai.generate(prompt, model=model, provider=provider)
 
         if len(text) == 0:
             raise ServiceError(code=422, msg="Empty back story")
