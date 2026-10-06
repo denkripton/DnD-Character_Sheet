@@ -16,6 +16,7 @@ CALLBACK_METHOD = f"{CALLBACK_PREFIX}:method"
 CALLBACK_REGEN = f"{CALLBACK_PREFIX}:regen"
 CALLBACK_EDIT = f"{CALLBACK_PREFIX}:edit"
 CALLBACK_CONFIRM = f"{CALLBACK_PREFIX}:confirm"
+CALLBACK_SAVE = f"{CALLBACK_PREFIX}:save"
 CALLBACK_GEN_FULL = f"{CALLBACK_PREFIX}:gen_full"
 CALLBACK_GEN_STEP = f"{CALLBACK_PREFIX}:gen_step"
 CALLBACK_FULL_METHOD = f"{CALLBACK_PREFIX}:full_method"
@@ -33,9 +34,14 @@ def navigation_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
+                InlineKeyboardButton(
+                    text="✅ Save character", callback_data=CALLBACK_SAVE
+                )
+            ],
+            [
                 InlineKeyboardButton(text="⬅️ Back", callback_data=CALLBACK_BACK),
                 InlineKeyboardButton(text="❌ Cancel", callback_data=CALLBACK_CANCEL),
-            ]
+            ],
         ]
     )
 

@@ -2,6 +2,10 @@ from aiogram import F, Router
 from aiogram.filters import Command, StateFilter
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
+from app.modules.backstory.keyboards import (
+    backstory_hub_keyboard,
+)
+from app.modules.backstory.states import BackstoryStates
 from app.modules.character.keyboards import (
     CALLBACK_BACK,
     CALLBACK_CANCEL,
@@ -16,6 +20,7 @@ from app.modules.character.keyboards import (
     CALLBACK_MANUAL,
     CALLBACK_METHOD,
     CALLBACK_REGEN,
+    CALLBACK_SAVE,
     CALLBACK_SET,
     generation_method_keyboard,
     generation_mode_keyboard,
@@ -59,6 +64,7 @@ from app.utils.constants import (
     CHARACTER_IN_PROGRESS_TEXT,
     CHARACTER_MANUAL_HINT_TEXT,
     CHARACTER_NOT_STARTED_TEXT,
+    CHARACTER_SAVED_TEXT,
     CHARACTER_STALE_TEXT,
     CHARACTER_STATS_FORMAT_TEXT,
     CHARACTER_STATS_METHOD_HINT_TEXT,
@@ -121,8 +127,8 @@ def _summary_text(data: dict) -> str:
         lines.extend(_stats_lines(stats, modifiers))
     lines.append("")
     lines.append(
-        "The draft is stored on the server. "
-        "Use /back to revise a value or /cancel to discard it."
+        "Tap ✅ Save character to finish, /back to revise a value, "
+        "or /cancel to discard the draft."
     )
     return "\n".join(lines)
 
@@ -396,6 +402,43 @@ async def handle_cancel(
     await _cancel(message, state, creation_service)
 
 
+async def _save_character(
+    callback: CallbackQuery, state, creation_service: CharacterCreationService
+) -> None:
+    data = await state.get_data()
+    if not data.get("draft_id") or not data.get("auth"):
+        await callback.answer(CHARACTER_NOT_STARTED_TEXT, show_alert=True)
+        return
+    if (
+        await state.get_state()
+    ) != CharacterCreationStates.summary.state:
+        await callback.answer(CHARACTER_STALE_TEXT, show_alert=True)
+        return
+    auth = data["auth"]
+    draft_id = data["draft_id"]
+    try:
+        result = await creation_service.save_character(auth, draft_id)
+    except CharacterCreationError as exc:
+        await callback.answer()
+        await callback.message.answer(str(exc))
+        return
+    except BackendUnavailableError:
+        await callback.answer()
+        await callback.message.answer(CHARACTER_UNAVAILABLE_TEXT)
+        return
+    await state.clear()
+    await state.update_data(
+        auth=auth,
+        character_id=result["character_id"],
+        character=result.get("character") or {},
+    )
+    await state.set_state(BackstoryStates.character_saved)
+    await callback.answer()
+    await callback.message.answer(
+        CHARACTER_SAVED_TEXT, reply_markup=backstory_hub_keyboard()
+    )
+
+
 async def _start_full_generation(callback: CallbackQuery, state) -> None:
     data = await state.get_data()
     if not data.get("draft_id") or not data.get("auth"):
@@ -646,6 +689,9 @@ async def handle_callback(
         return
     if raw == CALLBACK_CONFIRM:
         await _confirm_stats(callback, state)
+        return
+    if raw == CALLBACK_SAVE:
+        await _save_character(callback, state, creation_service)
         return
     if raw == CALLBACK_EDIT:
         await _edit_values(callback, state)

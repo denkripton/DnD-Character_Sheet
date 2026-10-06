@@ -1,13 +1,23 @@
+import uuid
 from uuid import UUID
 
 from pydantic import ValidationError
 from src.config import settings
+from src.infrastructure.redis import cache
 from src.modules.auth.repository import UserRepository
 from src.modules.character.base.enums.generation_limits import GenerationLimits
-from src.modules.character.base.schemas import CharacterUpdateSchema
+from src.modules.character.base.schemas import (
+    CharacterCreateSchema,
+    CharacterReadSchema,
+    CharacterUpdateSchema,
+)
 from src.modules.character.draft.schemas import CharacterDraftReadSchema
 from src.modules.character.models import CharacterDraft
-from src.modules.character.repositories import CharacterDraftRepository
+from src.modules.character.repositories import (
+    CharacterDraftRepository,
+    CharacterRepository,
+    StatsRepository,
+)
 from src.modules.character.stats.schemas import StatsCreateSchema
 from src.modules.character.utils import (
     assign_stats,
@@ -33,7 +43,26 @@ PARAMETER_LABELS = {
 
 FULL_GENERATION_METHODS = ("random", "standard", "point_buy")
 
-DAILY_LIMIT_COUNTED_OPERATIONS = frozenset({"generate_character"})
+DAILY_LIMIT_COUNTED_OPERATIONS = frozenset({"generate_character", "save_character"})
+
+CHARACTER_DRAFT_FIELDS = (
+    "name",
+    "kind",
+    "spec_class",
+    "alignment",
+    "background",
+    "level",
+    "experience_points",
+)
+
+STAT_FIELDS = (
+    "strength",
+    "dexterity",
+    "constitution",
+    "intelligence",
+    "wisdom",
+    "charisma",
+)
 
 
 def parameter_label(parameter: str) -> str:
@@ -89,15 +118,34 @@ def _stats_error_message(exc: ValidationError) -> str:
     return str(error.get("msg", "Stats are invalid."))
 
 
+def _draft_stats_values(stats) -> dict:
+    if not isinstance(stats, dict):
+        raise ServiceError(msg="Ability scores are invalid.", code=422)
+    values = {}
+    for field in STAT_FIELDS:
+        value = stats.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or not 3 <= value <= 20:
+            raise ServiceError(
+                msg="Ability scores must be whole numbers between 3 and 20.",
+                code=422,
+            )
+        values[field] = value
+    return values
+
+
 class CharacterDraftService:
     def __init__(
         self,
         draft_repository: CharacterDraftRepository,
+        character_repository: CharacterRepository,
+        stats_repository: StatsRepository,
         user_repository: UserRepository,
         unit_of_work: UnitOfWork,
         rate_limiter: RateLimiter,
     ):
         self.draft_repo = draft_repository
+        self.character_repo = character_repository
+        self.stats_repo = stats_repository
         self.user_repo = user_repository
         self.uow = unit_of_work
         self.rate_limiter = rate_limiter
@@ -197,6 +245,47 @@ class CharacterDraftService:
         draft = await self._get_owned(user_id, draft_id)
         await self.draft_repo.delete_obj(draft.id)
         await self.uow.commit()
+
+    async def save_character(self, user_id: str, draft_id) -> dict:
+        await self._enforce_daily_generation_limit(user_id, "save_character")
+        draft = await self._get_owned(user_id, draft_id)
+        data = draft.data or {}
+        payload = {
+            field: data[field]
+            for field in CHARACTER_DRAFT_FIELDS
+            if field in data
+        }
+        try:
+            validated = CharacterCreateSchema(**payload)
+        except ValidationError as exc:
+            raise ServiceError(
+                msg=friendly_validation_message(exc), code=422
+            ) from exc
+
+        stats = data.get("stats")
+        stats_values = _draft_stats_values(stats) if stats else None
+
+        character = await self.character_repo.create(
+            id=uuid.uuid4(),
+            owner_id=user_id,
+            **validated.model_dump(),
+        )
+        if stats_values is not None:
+            await self.stats_repo.create(
+                character_id=character.id, **stats_values
+            )
+        await self.draft_repo.delete_obj(draft.id)
+        await self.uow.commit()
+        await self.uow.refresh(character)
+
+        await cache.delete_pattern(f"characters:list:{user_id}*")
+
+        return {
+            "character_id": str(character.id),
+            "character": CharacterReadSchema.model_validate(character).model_dump(
+                mode="json"
+            ),
+        }
 
     async def generate_character(
         self, user_id: str, draft_id, method: str

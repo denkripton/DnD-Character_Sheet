@@ -9,14 +9,30 @@ from src.messaging.enums.constants import AUTH_USER_ID_HEADER
 from src.messaging.interfaces import MessagePublisher
 from src.messaging.messages import MessageEnvelope
 from src.messaging.security import require_identity_headers, verify_command
+from src.modules.character.backstory import character_backstory_service_scope
+from src.modules.character.backstory.schemas import BackstoryCreateSchema
+from src.modules.character.backstory.service import BackstoryService
 from src.modules.character.draft import (
     CharacterDraftReadSchema,
     CharacterDraftService,
     character_draft_service_scope,
 )
-from src.utils.exceptions import RateLimitExceeded, ServiceError
+from src.utils.exceptions import (
+    AIProviderError,
+    AIProviderRateLimitError,
+    AIProviderTimeoutError,
+    RateLimitExceeded,
+    ServiceError,
+)
 
 DraftServiceScope = Callable[[], AbstractAsyncContextManager[CharacterDraftService]]
+BackstoryServiceScope = Callable[[], AbstractAsyncContextManager[BackstoryService]]
+
+AI_TIMEOUT_ERROR_TEXT = "The AI provider timed out. Please try again."
+AI_RATE_LIMIT_ERROR_TEXT = (
+    "The AI provider rate limit was reached. Please try again later."
+)
+AI_UNAVAILABLE_ERROR_TEXT = "The AI provider is unavailable right now."
 
 
 def build_bot_command_dispatcher(
@@ -24,9 +40,12 @@ def build_bot_command_dispatcher(
     secret: str | None = None,
     max_age_seconds: int = 300,
     draft_service_scope: DraftServiceScope | None = None,
+    backstory_service_scope: BackstoryServiceScope | None = None,
 ) -> CommandDispatcher:
     if draft_service_scope is None:
         draft_service_scope = character_draft_service_scope
+    if backstory_service_scope is None:
+        backstory_service_scope = character_backstory_service_scope
     dispatcher = CommandDispatcher()
     dispatcher.register(
         MessageType.CHARACTER_GENERATE,
@@ -40,6 +59,14 @@ def build_bot_command_dispatcher(
         MessageType.CHARACTER_CREATE,
         _require_authenticated(
             _handle_draft_create(producer, draft_service_scope),
+            secret,
+            max_age_seconds,
+        ),
+    )
+    dispatcher.register(
+        MessageType.CHARACTER_SAVE,
+        _require_authenticated(
+            _handle_draft_save(producer, draft_service_scope),
             secret,
             max_age_seconds,
         ),
@@ -64,6 +91,22 @@ def build_bot_command_dispatcher(
         MessageType.CHARACTER_STATS,
         _require_authenticated(
             _handle_draft_stats(producer, draft_service_scope),
+            secret,
+            max_age_seconds,
+        ),
+    )
+    dispatcher.register(
+        MessageType.CHARACTER_GENERATE_BACKSTORY,
+        _require_authenticated(
+            _handle_backstory_generate(producer, backstory_service_scope),
+            secret,
+            max_age_seconds,
+        ),
+    )
+    dispatcher.register(
+        MessageType.CHARACTER_SAVE_BACKSTORY,
+        _require_authenticated(
+            _handle_backstory_save(producer, backstory_service_scope),
             secret,
             max_age_seconds,
         ),
@@ -129,6 +172,25 @@ def _generate_payload(result) -> dict:
     return {"ok": True}
 
 
+def _saved_payload(result) -> dict:
+    if isinstance(result, dict):
+        return {"ok": True, **result}
+    return {"ok": True}
+
+
+def _backstory_preview_payload(result) -> dict:
+    if isinstance(result, str):
+        return {"ok": True, "backstory": result}
+    return {"ok": True}
+
+
+def _backstory_saved_payload(result) -> dict:
+    backstory = getattr(result, "backstory", None)
+    if isinstance(backstory, str):
+        return {"ok": True, "backstory": backstory}
+    return {"ok": True}
+
+
 async def _draft_call(
     draft_service_scope, call, payload_builder=_draft_payload
 ) -> dict:
@@ -139,6 +201,30 @@ async def _draft_call(
         return {"ok": False, "error": str(exc)}
     except ServiceError as exc:
         return {"ok": False, "error": str(exc)}
+    except SQLAlchemyError:
+        return {
+            "ok": False,
+            "error": "The request could not be completed. Please try again.",
+        }
+    return payload_builder(result)
+
+
+async def _backstory_call(
+    backstory_service_scope, call, payload_builder=_backstory_preview_payload
+) -> dict:
+    try:
+        async with backstory_service_scope() as service:
+            result = await call(service)
+    except RateLimitExceeded as exc:
+        return {"ok": False, "error": str(exc)}
+    except ServiceError as exc:
+        return {"ok": False, "error": str(exc)}
+    except AIProviderTimeoutError:
+        return {"ok": False, "error": AI_TIMEOUT_ERROR_TEXT}
+    except AIProviderRateLimitError:
+        return {"ok": False, "error": AI_RATE_LIMIT_ERROR_TEXT}
+    except AIProviderError:
+        return {"ok": False, "error": AI_UNAVAILABLE_ERROR_TEXT}
     except SQLAlchemyError:
         return {
             "ok": False,
@@ -179,6 +265,27 @@ def _handle_draft_create(producer: MessagePublisher, draft_service_scope):
         payload = await _draft_call(draft_service_scope, call)
         await _publish_response(
             producer, MessageType.CHARACTER_CREATED, envelope, payload
+        )
+
+    return handle
+
+
+def _handle_draft_save(producer: MessagePublisher, draft_service_scope):
+    async def handle(envelope: MessageEnvelope) -> None:
+        user_id = _identity(envelope)[AUTH_USER_ID_HEADER]
+        payload = envelope.payload if isinstance(envelope.payload, dict) else {}
+        draft_id = payload.get("draft_id")
+
+        async def call(service):
+            if not draft_id:
+                raise ServiceError(
+                    msg="Invalid character save request.", code=422
+                )
+            return await service.save_character(user_id, draft_id)
+
+        result = await _draft_call(draft_service_scope, call, _saved_payload)
+        await _publish_response(
+            producer, MessageType.CHARACTER_SAVED, envelope, result
         )
 
     return handle
@@ -255,6 +362,95 @@ def _handle_draft_stats(producer: MessagePublisher, draft_service_scope):
         result = await _draft_call(draft_service_scope, call, _stats_payload)
         await _publish_response(
             producer, MessageType.CHARACTER_STATS_CHANGED, envelope, result
+        )
+
+    return handle
+
+
+def _handle_backstory_generate(producer: MessagePublisher, backstory_service_scope):
+    async def handle(envelope: MessageEnvelope) -> None:
+        user_id = _identity(envelope)[AUTH_USER_ID_HEADER]
+        payload = envelope.payload if isinstance(envelope.payload, dict) else {}
+        character_id = payload.get("character_id")
+        prompt = payload.get("prompt")
+        model = payload.get("model")
+        provider = payload.get("provider")
+
+        async def call(service):
+            if not character_id:
+                raise ServiceError(
+                    msg="Invalid backstory request.", code=422
+                )
+            if prompt is not None and (
+                not isinstance(prompt, str) or len(prompt) > 1000
+            ):
+                raise ServiceError(
+                    msg="Invalid backstory request.", code=422
+                )
+            if model is not None and not isinstance(model, str):
+                raise ServiceError(
+                    msg="Invalid backstory request.", code=422
+                )
+            if provider is not None and not isinstance(provider, str):
+                raise ServiceError(
+                    msg="Invalid backstory request.", code=422
+                )
+            return await service.preview_backstory(
+                user_id,
+                character_id,
+                model=model,
+                provider=provider,
+                prompt=prompt,
+            )
+
+        result = await _backstory_call(
+            backstory_service_scope, call, _backstory_preview_payload
+        )
+        await _publish_response(
+            producer,
+            MessageType.CHARACTER_BACKSTORY_GENERATED,
+            envelope,
+            result,
+        )
+
+    return handle
+
+
+def _handle_backstory_save(producer: MessagePublisher, backstory_service_scope):
+    async def handle(envelope: MessageEnvelope) -> None:
+        user_id = _identity(envelope)[AUTH_USER_ID_HEADER]
+        payload = envelope.payload if isinstance(envelope.payload, dict) else {}
+        character_id = payload.get("character_id")
+        backstory = payload.get("backstory")
+
+        async def call(service):
+            if not character_id or not isinstance(backstory, str):
+                raise ServiceError(
+                    msg="Backstory text is required.", code=422
+                )
+            if not backstory.strip():
+                raise ServiceError(
+                    msg="Backstory text is required.", code=422
+                )
+            if len(backstory) > 10000:
+                raise ServiceError(
+                    msg="Backstory must be no more than 10000 characters.",
+                    code=422,
+                )
+            return await service.set_backstory(
+                user_id,
+                character_id,
+                BackstoryCreateSchema(backstory=backstory),
+            )
+
+        result = await _backstory_call(
+            backstory_service_scope, call, _backstory_saved_payload
+        )
+        await _publish_response(
+            producer,
+            MessageType.CHARACTER_BACKSTORY_SAVED,
+            envelope,
+            result,
         )
 
     return handle

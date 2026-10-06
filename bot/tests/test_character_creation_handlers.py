@@ -2,6 +2,7 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from app.modules.backstory.states import BackstoryStates
 from app.modules.character.keyboards import (
     CALLBACK_BACK,
     CALLBACK_CANCEL,
@@ -14,6 +15,7 @@ from app.modules.character.keyboards import (
     CALLBACK_GEN_STEP,
     CALLBACK_REGEN,
     generation_method_keyboard,
+    navigation_keyboard,
     stats_method_keyboard,
     step_keyboard,
 )
@@ -53,6 +55,7 @@ from app.utils.constants import (
     CHARACTER_GENERATION_MODE_TEXT,
     CHARACTER_IN_PROGRESS_TEXT,
     CHARACTER_NOT_STARTED_TEXT,
+    CHARACTER_SAVED_TEXT,
     CHARACTER_STALE_TEXT,
     CHARACTER_STATS_FORMAT_TEXT,
     CHARACTER_STATS_METHOD_HINT_TEXT,
@@ -106,6 +109,7 @@ class FakeCreationService:
         self.stats_generated = []
         self.stats_set = []
         self.characters_generated = []
+        self.saved = []
         self.data = {}
         self.stats = None
         self.modifiers = None
@@ -206,6 +210,14 @@ class FakeCreationService:
     async def cancel(self, auth, draft_id):
         self._maybe_fail()
         self.cancelled.append(draft_id)
+
+    async def save_character(self, auth, draft_id):
+        self._maybe_fail()
+        self.saved.append(draft_id)
+        return {
+            "character_id": "char-1",
+            "character": {"id": "char-1", "name": self.data.get("name")},
+        }
 
 
 def _message(text=None):
@@ -1221,3 +1233,100 @@ def test_generation_callbacks_stale_without_draft():
 
     assert service.characters_generated == []
     assert service.starts == 0
+
+
+def _to_summary(service=None, state=None):
+    service = service or FakeCreationService()
+    state = state or _state_with_auth()
+    asyncio.run(handle_create(_message(), state, service))
+    asyncio.run(handle_callback(_callback("cc:gen_step"), state, service))
+    asyncio.run(handle_step_input(_message("Aria"), state, service))
+    asyncio.run(handle_callback(_callback("cc:set:race:Elf"), state, service))
+    asyncio.run(handle_callback(_callback("cc:gen:spec_class"), state, service))
+    asyncio.run(handle_callback(_callback("cc:method:random"), state, service))
+    asyncio.run(handle_callback(_callback(CALLBACK_CONFIRM), state, service))
+    assert state.state == CharacterCreationStates.summary.state
+    return service, state
+
+
+def test_summary_keyboard_offers_save_character_button():
+    keyboard = navigation_keyboard()
+    callback_data = [
+        button.callback_data
+        for row in keyboard.inline_keyboard
+        for button in row
+    ]
+    assert "cc:save" in callback_data
+    assert CALLBACK_BACK in callback_data
+    assert CALLBACK_CANCEL in callback_data
+
+
+def test_save_character_button_transitions_to_backstory_hub():
+    service, state = _to_summary()
+
+    callback = _callback("cc:save")
+    asyncio.run(handle_callback(callback, state, service))
+
+    assert service.saved == ["draft-1"]
+    assert state.state == BackstoryStates.character_saved.state
+    assert state.data["character_id"] == "char-1"
+    assert state.data["auth"] == AUTH
+    assert "draft_id" not in state.data
+    assert _last_answer(callback.message) == CHARACTER_SAVED_TEXT
+    keyboard = callback.message.answer.call_args.kwargs["reply_markup"]
+    callback_data = [
+        button.callback_data
+        for row in keyboard.inline_keyboard
+        for button in row
+    ]
+    assert "bs:start" in callback_data
+    assert "bs:close" in callback_data
+
+
+def test_save_character_rejected_outside_summary_state():
+    service = FakeCreationService()
+    state, _ = _started_state(service)
+
+    callback = _callback("cc:save")
+    asyncio.run(handle_callback(callback, state, service))
+
+    assert service.saved == []
+    assert state.state == CharacterCreationStates.name.state
+    callback.answer.assert_awaited_with(CHARACTER_STALE_TEXT, show_alert=True)
+
+
+def test_save_character_backend_rejection_keeps_summary():
+    service, state = _to_summary()
+    service.fail_with = CharacterCreationError("Name is required.")
+
+    callback = _callback("cc:save")
+    asyncio.run(handle_callback(callback, state, service))
+
+    assert state.state == CharacterCreationStates.summary.state
+    assert state.data["draft_id"] == "draft-1"
+    assert _last_answer(callback.message) == "Name is required."
+
+
+def test_save_character_backend_unavailable_keeps_summary():
+    service, state = _to_summary()
+    service.fail_with = BackendUnavailableError("broker down")
+
+    callback = _callback("cc:save")
+    asyncio.run(handle_callback(callback, state, service))
+
+    assert state.state == CharacterCreationStates.summary.state
+    assert state.data["draft_id"] == "draft-1"
+    assert _last_answer(callback.message) == CHARACTER_UNAVAILABLE_TEXT
+
+
+def test_save_character_without_draft_alerts_not_started():
+    service = FakeCreationService()
+    state = _state_with_auth()
+
+    callback = _callback("cc:save")
+    asyncio.run(handle_callback(callback, state, service))
+
+    assert service.saved == []
+    callback.answer.assert_awaited_with(
+        CHARACTER_NOT_STARTED_TEXT, show_alert=True
+    )

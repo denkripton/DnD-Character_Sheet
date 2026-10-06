@@ -61,3 +61,32 @@ CHARACTER_GENERATION_RESULT_TEXT = (
     "Alignment: {alignment}\n"
     "Background: {background}"
 )
+
+CHARACTER_SAVED_TEXT = (
+    "Character saved!\n"
+    "Generate an AI backstory with the buttons below, or tap Done."
+)
+BACKSTORY_START_TEXT = (
+    "Optional: tell me what the backstory should focus on.\n"
+    "Send a short message, or tap Generate to let the AI decide."
+)
+BACKSTORY_GENERATING_TEXT = "Generating the backstory..."
+BACKSTORY_REVIEW_HEADER = "Proposed backstory:"
+BACKSTORY_REVIEW_ACTIONS = (
+    "Accept to save it, regenerate for another version, edit it, or cancel."
+)
+BACKSTORY_SAVED_TEXT = "The backstory was saved to your character."
+BACKSTORY_DISCARDED_TEXT = "The generated backstory was discarded."
+BACKSTORY_CLOSED_TEXT = "Done. Your character is saved."
+BACKSTORY_HUB_HINT_TEXT = "Use the buttons below."
+BACKSTORY_REVIEW_HINT_TEXT = (
+    "Use the buttons: Accept, Regenerate, Edit, or Cancel."
+)
+BACKSTORY_NOT_STARTED_TEXT = (
+    "No saved character for the backstory flow. Create one with "
+    "/create_character first."
+)
+BACKSTORY_TOO_LONG_TEXT = (
+    "That backstory is too long. Please shorten it to 10000 characters."
+)
+BACKSTORY_EDIT_TEXT = "Type the corrected backstory in one message."

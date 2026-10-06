@@ -15,7 +15,7 @@ from src.messaging.enums.constants import (
 )
 from src.modules.character.base.enums.generation_limits import GenerationLimits
 from src.modules.character.draft import CharacterDraftService
-from src.modules.character.models import CharacterDraft
+from src.modules.character.models import Character, CharacterDraft, Stat
 from src.modules.character.utils.random_character import KINDS, NAMES, SPEC_CLASSES
 from src.modules.commands.dispatcher_factory import build_bot_command_dispatcher
 from src.utils.exceptions import MessageAuthenticationError
@@ -70,9 +70,13 @@ def _environment(rate_limiter=None, uow=None):
     user_repo.rows.append(DummyUser("user-1"))
     user_repo.rows.append(DummyUser("user-2"))
     draft_repo = FakeRepo(model=CharacterDraft)
+    character_repo = FakeRepo(model=Character)
+    stats_repo = FakeRepo(model=Stat)
     uow = uow or FakeUnitOfWork()
     service = CharacterDraftService(
         draft_repository=draft_repo,
+        character_repository=character_repo,
+        stats_repository=stats_repo,
         user_repository=user_repo,
         unit_of_work=uow,
         rate_limiter=rate_limiter or StubRateLimiter(allowed=True),
@@ -321,6 +325,8 @@ def test_signed_command_with_secret_verifies_and_dispatches():
     async def scope():
         yield CharacterDraftService(
             draft_repository=draft_repo,
+            character_repository=FakeRepo(model=Character),
+            stats_repository=FakeRepo(model=Stat),
             user_repository=user_repo,
             unit_of_work=FakeUnitOfWork(),
             rate_limiter=StubRateLimiter(allowed=True),

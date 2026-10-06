@@ -3,9 +3,9 @@ from unittest.mock import patch
 
 import pytest
 from src.modules.character.draft.service import CharacterDraftService
-from src.modules.character.models import CharacterDraft
+from src.modules.character.models import Character, CharacterDraft, Stat
 from src.modules.character.utils.random_character import KINDS, NAMES, SPEC_CLASSES
-from src.utils.exceptions import ServiceError
+from src.utils.exceptions import RateLimitExceeded, ServiceError
 from tests.utils import FakeRepo, FakeUnitOfWork, StubRateLimiter
 
 
@@ -22,6 +22,8 @@ def _service(rate_limiter=None):
     uow = FakeUnitOfWork()
     service = CharacterDraftService(
         draft_repository=draft_repo,
+        character_repository=FakeRepo(model=Character),
+        stats_repository=FakeRepo(model=Stat),
         user_repository=user_repo,
         unit_of_work=uow,
         rate_limiter=rate_limiter or StubRateLimiter(allowed=True),
@@ -545,5 +547,124 @@ def test_stats_then_parameters_keep_both_in_draft():
         assert draft.data["stats"] == STANDARD_STATS
         assert draft.data["spec_class"] == "Wizard"
         assert draft_repo.rows[0].data == draft.data
+
+    asyncio.run(flow())
+
+
+def test_save_character_creates_character_stats_and_deletes_draft():
+    service, draft_repo, uow = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        for parameter, value in [
+            ("name", "Aria"),
+            ("kind", "Elf"),
+            ("spec_class", "Wizard"),
+        ]:
+            await service.update_parameter("user-1", draft.id, parameter, value)
+        await service.generate_stats("user-1", draft.id, "standard")
+        commits_before = uow.commit_calls
+
+        result = await service.save_character("user-1", draft.id)
+
+        assert set(result) == {"character_id", "character"}
+        assert result["character"]["name"] == "Aria"
+        assert result["character"]["kind"] == "Elf"
+        assert result["character"]["spec_class"] == "Wizard"
+        assert len(service.character_repo.rows) == 1
+        assert service.character_repo.rows[0].owner_id == "user-1"
+        assert len(service.stats_repo.rows) == 1
+        assert service.stats_repo.rows[0].strength == STANDARD_STATS["strength"]
+        assert service.stats_repo.rows[0].charisma == STANDARD_STATS["charisma"]
+        assert draft_repo.rows == []
+        assert uow.commit_calls == commits_before + 1
+
+    asyncio.run(flow())
+
+
+def test_save_character_requires_required_fields():
+    service, draft_repo, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+
+        with pytest.raises(ServiceError) as exc_info:
+            await service.save_character("user-1", draft.id)
+
+        assert "required" in exc_info.value.message
+        assert service.character_repo.rows == []
+        assert len(draft_repo.rows) == 1
+
+    asyncio.run(flow())
+
+
+def test_save_character_rejects_other_user_draft():
+    service, _, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        for parameter, value in [
+            ("name", "Aria"),
+            ("kind", "Elf"),
+            ("spec_class", "Wizard"),
+        ]:
+            await service.update_parameter("user-1", draft.id, parameter, value)
+
+        with pytest.raises(ServiceError) as exc_info:
+            await service.save_character("user-2", draft.id)
+
+        assert "not found" in exc_info.value.message
+        assert service.character_repo.rows == []
+
+    asyncio.run(flow())
+
+
+def test_save_character_invalid_stats_rejected():
+    service, draft_repo, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        for parameter, value in [
+            ("name", "Aria"),
+            ("kind", "Elf"),
+            ("spec_class", "Wizard"),
+        ]:
+            await service.update_parameter("user-1", draft.id, parameter, value)
+        draft_repo.rows[0].data["stats"] = {
+            "strength": 99,
+            "dexterity": 14,
+            "constitution": 13,
+            "intelligence": 12,
+            "wisdom": 10,
+            "charisma": 8,
+        }
+
+        with pytest.raises(ServiceError) as exc_info:
+            await service.save_character("user-1", draft.id)
+
+        assert "3 and 20" in exc_info.value.message
+        assert service.character_repo.rows == []
+        assert len(draft_repo.rows) == 1
+
+    asyncio.run(flow())
+
+
+def test_save_character_rate_limited():
+    service, _, _ = _service(rate_limiter=StubRateLimiter(allowed=False))
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        for parameter, value in [
+            ("name", "Aria"),
+            ("kind", "Elf"),
+            ("spec_class", "Wizard"),
+        ]:
+            await service.update_parameter("user-1", draft.id, parameter, value)
+
+        with pytest.raises(RateLimitExceeded) as exc_info:
+            await service.save_character("user-1", draft.id)
+
+        assert "Daily limit reached" in str(exc_info.value)
+        assert service.character_repo.rows == []
 
     asyncio.run(flow())

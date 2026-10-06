@@ -18,8 +18,18 @@ from src.modules.character.models import (
     Skill,
     Stat,
 )
-from src.utils.exceptions import AIProviderRateLimitError, ServiceError
-from tests.utils import FakeRepo, FakeUnitOfWork, build_guard, build_owned_character
+from src.utils.exceptions import (
+    AIProviderRateLimitError,
+    RateLimitExceeded,
+    ServiceError,
+)
+from tests.utils import (
+    FakeRepo,
+    FakeUnitOfWork,
+    StubRateLimiter,
+    build_guard,
+    build_owned_character,
+)
 
 
 class FakeAI:
@@ -44,7 +54,11 @@ class DummyUser:
         self.id = id
 
 
-def _build(text="A wandering hero seeks an ancient artifact.", error=None):
+def _build(
+    text="A wandering hero seeks an ancient artifact.",
+    error=None,
+    allowed=True,
+):
     user_repo = FakeRepo(model=DummyUser)
     character_repo = FakeRepo(model=Character)
     guard = build_guard(character_repo, user_repo, "user-1")
@@ -65,6 +79,7 @@ def _build(text="A wandering hero seeks an ancient artifact.", error=None):
         proficiency_repository=FakeRepo(model=Proficiency),
         saving_throws_repository=FakeRepo(model=SavingThrows),
         unit_of_work=uow,
+        rate_limiter=StubRateLimiter(allowed=allowed),
     )
     return service, "user-1", CHAR_ID, ai
 
@@ -171,6 +186,72 @@ def test_generate_backstory_forwards_provider_selection():
         )
         assert ai.calls[0]["model"] == "gemini-2.5-pro"
         assert ai.calls[0]["provider"] == "gemini"
+
+    asyncio.run(flow())
+
+
+def test_preview_backstory_returns_text_without_persisting():
+    service, user_id, char_id, ai = _build()
+
+    async def flow():
+        text = await service.preview_backstory(user_id, char_id)
+
+        assert text == ai.text
+        assert service.repo.rows == []
+        assert "Name: Grog" in ai.calls[0]["prompt"]
+
+    asyncio.run(flow())
+
+
+def test_generate_backstory_appends_player_prompt():
+    service, user_id, char_id, ai = _build()
+
+    async def flow():
+        await service.generate_backstory(
+            user_id, char_id, prompt="sworn enemy of necromancers"
+        )
+
+        prompt = ai.calls[0]["prompt"]
+        assert "Additional instructions from the player:" in prompt
+        assert "sworn enemy of necromancers" in prompt
+
+    asyncio.run(flow())
+
+
+def test_generate_backstory_without_prompt_uses_character_context():
+    service, user_id, char_id, ai = _build()
+
+    async def flow():
+        await service.generate_backstory(user_id, char_id)
+
+        prompt = ai.calls[0]["prompt"]
+        assert "Additional instructions" not in prompt
+
+    asyncio.run(flow())
+
+
+def test_preview_backstory_rate_limited():
+    service, user_id, char_id, ai = _build(allowed=False)
+
+    async def flow():
+        with pytest.raises(RateLimitExceeded) as exc_info:
+            await service.preview_backstory(user_id, char_id)
+
+        assert "Daily limit reached" in str(exc_info.value)
+        assert ai.calls == []
+
+    asyncio.run(flow())
+
+
+def test_generate_backstory_rate_limited():
+    service, user_id, char_id, ai = _build(allowed=False)
+
+    async def flow():
+        with pytest.raises(RateLimitExceeded):
+            await service.generate_backstory(user_id, char_id)
+
+        assert ai.calls == []
+        assert service.repo.rows == []
 
     asyncio.run(flow())
 

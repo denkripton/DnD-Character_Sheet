@@ -259,3 +259,143 @@ def test_generate_character_transport_failure_raises_backend_unavailable():
 
     with pytest.raises(BackendUnavailableError):
         asyncio.run(service.generate_character(AUTH, "d1", "standard"))
+
+
+def test_save_character_sends_save_command_with_identity():
+    service, rabbit = _service(
+        payload={
+            "ok": True,
+            "character_id": "char-1",
+            "character": {"id": "char-1", "name": "Aria"},
+        }
+    )
+
+    result = asyncio.run(service.save_character(AUTH, "d1"))
+
+    assert result == {
+        "character_id": "char-1",
+        "character": {"id": "char-1", "name": "Aria"},
+    }
+    call = rabbit.calls[0]
+    assert call["message_type"] == MessageType.CHARACTER_SAVE
+    assert call["payload"] == {"draft_id": "d1"}
+    assert call["kwargs"]["user_id"] == "user-1"
+
+
+def test_save_character_backend_rejection_raises_character_creation_error():
+    service, _ = _service(payload={"ok": False, "error": "Name is required."})
+
+    with pytest.raises(CharacterCreationError) as exc_info:
+        asyncio.run(service.save_character(AUTH, "d1"))
+    assert str(exc_info.value) == "Name is required."
+
+
+def test_save_character_response_without_character_raises():
+    service, _ = _service(payload={"ok": True, "character_id": "char-1"})
+
+    with pytest.raises(CharacterCreationError):
+        asyncio.run(service.save_character(AUTH, "d1"))
+
+
+def test_save_character_transport_failure_raises_backend_unavailable():
+    service, _ = _service(error=ConnectionError("broker down"))
+
+    with pytest.raises(BackendUnavailableError):
+        asyncio.run(service.save_character(AUTH, "d1"))
+
+
+def test_generate_backstory_sends_generate_command_with_prompt():
+    service, rabbit = _service(
+        payload={"ok": True, "backstory": "A wandering hero."}
+    )
+
+    backstory = asyncio.run(
+        service.generate_backstory(AUTH, "char-1", prompt="sworn enemy")
+    )
+
+    assert backstory == "A wandering hero."
+    call = rabbit.calls[0]
+    assert call["message_type"] == MessageType.CHARACTER_GENERATE_BACKSTORY
+    assert call["payload"] == {
+        "character_id": "char-1",
+        "prompt": "sworn enemy",
+    }
+    assert call["kwargs"]["user_id"] == "user-1"
+
+
+def test_generate_backstory_without_prompt_sends_none():
+    service, rabbit = _service(
+        payload={"ok": True, "backstory": "A wandering hero."}
+    )
+
+    asyncio.run(service.generate_backstory(AUTH, "char-1"))
+
+    call = rabbit.calls[0]
+    assert call["payload"] == {"character_id": "char-1", "prompt": None}
+
+
+def test_generate_backstory_backend_rejection_raises_character_creation_error():
+    service, _ = _service(
+        payload={"ok": False, "error": "Daily limit reached: 5/5"}
+    )
+
+    with pytest.raises(CharacterCreationError) as exc_info:
+        asyncio.run(service.generate_backstory(AUTH, "char-1"))
+    assert str(exc_info.value) == "Daily limit reached: 5/5"
+
+
+def test_generate_backstory_response_without_text_raises():
+    service, _ = _service(payload={"ok": True})
+
+    with pytest.raises(CharacterCreationError):
+        asyncio.run(service.generate_backstory(AUTH, "char-1"))
+
+
+def test_generate_backstory_transport_failure_raises_backend_unavailable():
+    service, _ = _service(error=ConnectionError("broker down"))
+
+    with pytest.raises(BackendUnavailableError):
+        asyncio.run(service.generate_backstory(AUTH, "char-1"))
+
+
+def test_save_backstory_sends_save_command_with_text():
+    service, rabbit = _service(
+        payload={"ok": True, "backstory": "Raised by wolves."}
+    )
+
+    saved = asyncio.run(
+        service.save_backstory(AUTH, "char-1", "Raised by wolves.")
+    )
+
+    assert saved == "Raised by wolves."
+    call = rabbit.calls[0]
+    assert call["message_type"] == MessageType.CHARACTER_SAVE_BACKSTORY
+    assert call["payload"] == {
+        "character_id": "char-1",
+        "backstory": "Raised by wolves.",
+    }
+    assert call["kwargs"]["user_id"] == "user-1"
+
+
+def test_save_backstory_backend_rejection_raises_character_creation_error():
+    service, _ = _service(
+        payload={"ok": False, "error": "Backstory text is required."}
+    )
+
+    with pytest.raises(CharacterCreationError) as exc_info:
+        asyncio.run(service.save_backstory(AUTH, "char-1", "Text."))
+    assert str(exc_info.value) == "Backstory text is required."
+
+
+def test_save_backstory_response_without_text_raises():
+    service, _ = _service(payload={"ok": True})
+
+    with pytest.raises(CharacterCreationError):
+        asyncio.run(service.save_backstory(AUTH, "char-1", "Text."))
+
+
+def test_save_backstory_transport_failure_raises_backend_unavailable():
+    service, _ = _service(error=ConnectionError("broker down"))
+
+    with pytest.raises(BackendUnavailableError):
+        asyncio.run(service.save_backstory(AUTH, "char-1", "Text."))

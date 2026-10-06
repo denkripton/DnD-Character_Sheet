@@ -239,6 +239,24 @@ class FakeUnitOfWork:
         return obj
 
 
+def _coerce(value):
+    if isinstance(value, str):
+        try:
+            return uuid.UUID(value)
+        except ValueError:
+            return value
+    return value
+
+
+def _matches(row, kwargs) -> bool:
+    for key, value in kwargs.items():
+        if value is None:
+            continue
+        if _coerce(getattr(row, key, None)) != _coerce(value):
+            return False
+    return True
+
+
 class FakeRepo:
     def __init__(self, model):
         self.model = model
@@ -253,22 +271,12 @@ class FakeRepo:
 
     async def get_one(self, **kwargs):
         for row in self.rows:
-            if all(
-                value is None or getattr(row, key, None) == value
-                for key, value in kwargs.items()
-            ):
+            if _matches(row, kwargs):
                 return row
         return None
 
     async def get_many(self, skip: int = 0, limit: int = None, **kwargs):
-        rows = [
-            row
-            for row in self.rows
-            if all(
-                value is None or getattr(row, key, None) == value
-                for key, value in kwargs.items()
-            )
-        ]
+        rows = [row for row in self.rows if _matches(row, kwargs)]
         if limit is None:
             return rows[skip:]
         return rows[skip : skip + limit]

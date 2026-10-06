@@ -79,6 +79,42 @@ class CharacterCreationService:
             MessageType.CHARACTER_DELETE, {"draft_id": draft_id}, auth
         )
 
+    async def save_character(self, auth: dict, draft_id: str) -> dict:
+        payload = await self._request(
+            MessageType.CHARACTER_SAVE, {"draft_id": draft_id}, auth
+        )
+        character_id = payload.get("character_id")
+        character = payload.get("character")
+        if not character_id or not isinstance(character, dict):
+            raise CharacterCreationError(FALLBACK_ERROR_TEXT)
+        return {"character_id": character_id, "character": character}
+
+    async def generate_backstory(
+        self, auth: dict, character_id: str, prompt: str | None = None
+    ) -> str:
+        payload = await self._request(
+            MessageType.CHARACTER_GENERATE_BACKSTORY,
+            {"character_id": character_id, "prompt": prompt},
+            auth,
+        )
+        backstory = payload.get("backstory")
+        if not isinstance(backstory, str) or not backstory:
+            raise CharacterCreationError(FALLBACK_ERROR_TEXT)
+        return backstory
+
+    async def save_backstory(
+        self, auth: dict, character_id: str, backstory: str
+    ) -> str:
+        payload = await self._request(
+            MessageType.CHARACTER_SAVE_BACKSTORY,
+            {"character_id": character_id, "backstory": backstory},
+            auth,
+        )
+        saved = payload.get("backstory")
+        if not isinstance(saved, str):
+            raise CharacterCreationError(FALLBACK_ERROR_TEXT)
+        return saved
+
     async def _request(self, message_type, payload, auth: dict) -> dict:
         try:
             envelope = await self._rabbit.request(
