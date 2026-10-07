@@ -1,6 +1,6 @@
 from redis.asyncio import Redis
 
-from src.config import CACHE_TTL, settings
+from src.config import settings
 from src.infrastructure.redis.cache import RedisCache
 from src.infrastructure.redis.rate_limiter import RedisRateLimiter
 from src.repositories.redis import RedisRepository
@@ -18,7 +18,7 @@ redis = Redis.from_url(
 
 cache: CacheRepository = RedisCache(
     client=redis,
-    default_ttl=CACHE_TTL,
+    default_ttl=settings.CACHE_TTL,
 )
 
 rate_limiter: RateLimiter = RedisRateLimiter(redis)

@@ -5,8 +5,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logging.basicConfig(level=logging.INFO)
 
-CACHE_TTL = 300
-
 
 class Settings(BaseSettings):
     DB_URL: str
@@ -24,6 +22,9 @@ class Settings(BaseSettings):
     REDIS_SOCKET_TIMEOUT: float = 1.0
     REDIS_MAX_CONNECTIONS: int | None = None
     REDIS_HEALTH_CHECK_INTERVAL: int = 30
+
+    CACHE_TTL: int = 300
+    CACHE_METADATA_TTL: int = 3600
 
     CHARACTER_GENERATION_DAILY_LIMIT: int = 5
 

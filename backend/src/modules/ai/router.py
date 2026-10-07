@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from src.modules.ai.dependencies import get_ai_registry
+from src.modules.ai.dependencies import get_models_catalog, get_providers_catalog
 from src.modules.ai.schemas import AIModelCatalogSchema, AIProviderCatalogSchema
 from src.modules.auth import get_current_user
 from src.modules.auth.schemas.exceptions.user_401 import User401
@@ -22,13 +22,9 @@ router = APIRouter(prefix="/ai", route_class=ErrorHandlingRoute)
 )
 async def list_models(
     user_id: str = Depends(get_current_user),
-    registry=Depends(get_ai_registry),
+    catalog: list[dict] = Depends(get_models_catalog),
 ):
-    return [
-        AIModelCatalogSchema(provider=provider, model=model)
-        for provider, models in registry.provider_models.items()
-        for model in models
-    ]
+    return [AIModelCatalogSchema(**item) for item in catalog]
 
 
 @router.get(
@@ -44,9 +40,6 @@ async def list_models(
 )
 async def list_providers(
     user_id: str = Depends(get_current_user),
-    registry=Depends(get_ai_registry),
+    catalog: list[dict] = Depends(get_providers_catalog),
 ):
-    return [
-        AIProviderCatalogSchema(name=name, models=models)
-        for name, models in registry.provider_models.items()
-    ]
+    return [AIProviderCatalogSchema(**item) for item in catalog]

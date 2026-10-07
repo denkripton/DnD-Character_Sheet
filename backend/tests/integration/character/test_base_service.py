@@ -3,8 +3,7 @@ import uuid
 
 import pytest
 from pydantic import ValidationError
-
-from src.utils.exceptions import ServiceError
+from src.infrastructure.redis.cache import RedisCache
 from src.modules.character.base.schemas import (
     CharacterCreateSchema,
     CharacterUpdateSchema,
@@ -15,7 +14,9 @@ from src.modules.character.combat.service import CombatService
 from src.modules.character.models import Character, Combat, Stat
 from src.modules.character.stats.schemas import StatsCreateSchema
 from src.modules.character.stats.service import StatsService
+from src.utils.exceptions import ServiceError
 from tests.utils import (
+    FakeRedis,
     FakeRepo,
     FakeUnitOfWork,
     StubRateLimiter,
@@ -26,6 +27,14 @@ from tests.utils import (
 CHAR_ID = uuid.uuid4()
 OTHER_CHAR_ID = uuid.uuid4()
 THIRD_CHAR_ID = uuid.uuid4()
+
+
+@pytest.fixture(autouse=True)
+def isolated_character_cache(monkeypatch):
+    monkeypatch.setattr(
+        "src.modules.character.base.service.cache",
+        RedisCache(FakeRedis()),
+    )
 
 
 class DummyUser:
@@ -87,7 +96,7 @@ def test_character_creation_creates_and_read():
         assert created.name == "Grog"
         assert created.level == 1
 
-        fetched = await base.get_character_by_id(created.id)
+        fetched = await base.get_character_by_id(user_id, created.id)
         assert fetched.id == created.id
 
     asyncio.run(flow())
@@ -104,7 +113,7 @@ def test_generate_character_creates_random():
         assert created.alignment
         assert created.background
 
-        fetched = await base.get_character_by_id(created.id)
+        fetched = await base.get_character_by_id(user_id, created.id)
         assert fetched.id == created.id
 
     asyncio.run(flow())
@@ -196,15 +205,15 @@ def test_get_all_characters_returns_own_only():
 
 
 def test_get_character_by_id_missing_raises():
-    base, _, _, _, _, character_repo = _services()
+    base, _, _, user_id, _, character_repo = _services()
     build_owned_character(character_repo, CHAR_ID)
 
     async def flow():
         with pytest.raises(ServiceError) as exc_info:
-            await base.get_character_by_id(OTHER_CHAR_ID)
+            await base.get_character_by_id(user_id, OTHER_CHAR_ID)
         assert exc_info.value.status_code == 422
 
-        assert (await base.get_character_by_id(CHAR_ID)).id == CHAR_ID
+        assert (await base.get_character_by_id(user_id, CHAR_ID)).id == CHAR_ID
 
     asyncio.run(flow())
 
@@ -218,7 +227,7 @@ def test_delete_character_removes():
         assert result == {"message": "Character has been deleted"}
         assert character_repo.rows == []
         with pytest.raises(ServiceError):
-            await base.get_character_by_id(CHAR_ID)
+            await base.get_character_by_id(user_id, CHAR_ID)
 
     asyncio.run(flow())
 

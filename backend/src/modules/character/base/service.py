@@ -94,7 +94,7 @@ class CharacterService:
         await self.uow.commit()
         await self.uow.refresh(character)
 
-        await cache.delete_pattern(f"characters:by_id:{character_id}")
+        await cache.delete_pattern(f"characters:by_id:*:{character_id}")
         await cache.delete_pattern(f"characters:list:{user_id}*")
 
         return CharacterReadSchema.model_validate(character)
@@ -118,15 +118,13 @@ class CharacterService:
         await cache.set(key, [c.model_dump(mode="json") for c in result])
         return result
 
-    async def get_character_by_id(self, character_id):
-        key = f"characters:by_id:{character_id}"
+    async def get_character_by_id(self, user_id, character_id):
+        key = f"characters:by_id:{user_id}:{character_id}"
         cached = await cache.get(key)
         if cached is not None:
             return CharacterReadSchema(**cached)
 
-        character = await self.character_repo.get_by_id(character_id)
-        if character is None:
-            raise ServiceError(code=422, msg="Character does not exist")
+        character = await self.ownership.get_owned(user_id, character_id)
 
         result = CharacterReadSchema.model_validate(character)
         await cache.set(key, result.model_dump(mode="json"))

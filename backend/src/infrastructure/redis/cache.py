@@ -4,7 +4,7 @@ from typing import Any, Optional
 from pydantic import BaseModel
 from redis.asyncio import Redis
 
-from src.config import CACHE_TTL
+from src.config import settings
 from src.repositories.redis import RedisRepository
 
 
@@ -15,7 +15,7 @@ def _serialize(value: Any) -> str:
 
 
 class RedisCache(RedisRepository):
-    def __init__(self, client: Redis | None = None, default_ttl: int = CACHE_TTL):
+    def __init__(self, client: Redis | None = None, default_ttl: int = settings.CACHE_TTL):
         super().__init__(client=client)
         self._default_ttl = default_ttl
 

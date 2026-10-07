@@ -3,7 +3,7 @@ from typing import Any
 
 from redis.asyncio import Redis
 
-from src.config import CACHE_TTL, settings
+from src.config import settings
 from src.utils.interfaces.cache import CacheRepository
 
 
@@ -20,7 +20,7 @@ class RedisRepository(CacheRepository):
         except Exception:
             return None
 
-    async def set(self, key: str, value: Any, ttl: int = CACHE_TTL) -> None:
+    async def set(self, key: str, value: Any, ttl: int = settings.CACHE_TTL) -> None:
         try:
             await self.client.set(key, json.dumps(value), ex=ttl)
         except Exception:
