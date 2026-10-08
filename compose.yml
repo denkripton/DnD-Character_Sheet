@@ -7,8 +7,9 @@ services:
       - .env
     environment:
       ENVIRONMENT: production
+      DB_URL: postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
     depends_on:
-      db:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -36,6 +37,8 @@ services:
     environment:
       ENVIRONMENT: production
     depends_on:
+      backend:
+        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -45,8 +48,6 @@ services:
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
-    env_file:
-      - .env
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
@@ -70,10 +71,8 @@ services:
     networks:
       - internal
 
-  db:
+  postgres:
     image: postgres:16
-    env_file:
-      - .env
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}

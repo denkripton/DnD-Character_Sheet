@@ -36,19 +36,6 @@ services:
       - -m
       - app.main
 
-  db:
-    ports:
-      - "5433:5432"
-
-  redis:
-    ports:
-      - "6379:6379"
-
-  rabbitmq:
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-
 networks:
   internal:
     internal: false
