@@ -11,6 +11,7 @@ from src.modules.ai import ai_router
 from src.modules.auth import user_router
 from src.modules.character.router import character_router
 from src.modules.commands.dispatcher_factory import build_bot_command_dispatcher
+from src.modules.health import health_router
 from src.utils import register_exception_handlers
 from src.utils.interfaces.application import Application
 from src.utils.logging.middleware import RequestLoggingMiddleware
@@ -22,6 +23,7 @@ from src.utils.metadata import (
     title,
     version,
 )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -66,7 +68,7 @@ class API(Application):
         self.openapi_url = openapi_url
         self.tags_metadata = tags_metadata
         self.contact = contact
-        self.routers = [user_router, ai_router, character_router]
+        self.routers = [user_router, ai_router, character_router, health_router]
 
     def create(self):
         self.app = FastAPI(

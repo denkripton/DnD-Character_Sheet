@@ -1,7 +1,6 @@
 import asyncio
 
 import pytest
-
 from src.infrastructure.rabbitmq.connection import RabbitMQConnection
 from src.utils.exceptions import RabbitMQConnectionError
 
@@ -113,3 +112,45 @@ def test_connect_after_close_raises():
 
     with pytest.raises(RabbitMQConnectionError):
         run(connection.connect())
+
+
+def test_health_check_reports_down_when_not_connected():
+    connection = RabbitMQConnection(url="amqp://guest:guest@localhost:5672/")
+
+    assert run(connection.health_check()) is False
+
+
+def test_health_check_reports_up_and_closes_probe_channel():
+    broker = FakeBrokerConnection()
+    channel = FakeChannel()
+    factory, _ = flaky_factory(broker)
+
+    async def shared_channel():
+        return channel
+
+    broker.channel = shared_channel
+    connection = RabbitMQConnection(
+        url="amqp://guest:guest@localhost:5672/",
+        connect_factory=factory,
+    )
+    run(connection.connect())
+
+    assert run(connection.health_check()) is True
+    assert channel.is_closed is True
+
+
+def test_health_check_reports_down_when_channel_open_fails():
+    broker = FakeBrokerConnection()
+    factory, _ = flaky_factory(broker)
+
+    async def failing_channel():
+        raise OSError("network unreachable")
+
+    broker.channel = failing_channel
+    connection = RabbitMQConnection(
+        url="amqp://guest:guest@localhost:5672/",
+        connect_factory=factory,
+    )
+    run(connection.connect())
+
+    assert run(connection.health_check()) is False

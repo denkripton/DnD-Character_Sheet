@@ -92,3 +92,13 @@ def test_subscribe_delegates_to_consumer():
     mock_consumer.subscribe.assert_awaited_once_with(
         "character.updates", ["characters.*"], handler
     )
+
+
+def test_health_check_delegates_to_connection():
+    bus, connection, _ = make_bus()
+    connection.health_check = AsyncMock(return_value=True)
+
+    result = asyncio.run(bus.health_check())
+
+    assert result is True
+    connection.health_check.assert_awaited_once()

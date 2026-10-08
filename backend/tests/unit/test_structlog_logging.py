@@ -182,15 +182,15 @@ def test_exception_text_is_scrubbed_in_logs(capsys):
     assert "password=[REDACTED]" in record["exception"]
 
 
-def _request(headers: dict[bytes, bytes] | None = None) -> Request:
+def _request(headers: dict[bytes, bytes] | None = None, path: str = "/characters") -> Request:
     return Request(
         {
             "type": "http",
             "http_version": "1.1",
             "method": "GET",
             "scheme": "http",
-            "path": "/characters",
-            "raw_path": b"/characters",
+            "path": path,
+            "raw_path": path.encode(),
             "query_string": b"",
             "headers": headers or [],
             "client": ("127.0.0.1", 50000),
@@ -260,6 +260,30 @@ def test_request_middleware_logs_failure(capsys):
     assert failed["method"] == "GET"
     assert failed["path"] == "/characters"
     assert "RuntimeError" in failed["exception"]
+    assert get_request_id() is None
+    assert get_correlation_id() is None
+
+
+def test_request_middleware_skips_probe_logs_but_logs_failures(capsys):
+    middleware = RequestLoggingMiddleware(app=lambda scope, receive, send: None)
+
+    async def ok(request):
+        return PlainTextResponse("ok")
+
+    asyncio.run(middleware.dispatch(_request(path="/health/live"), ok))
+
+    out = capsys.readouterr().out
+    assert "request_started" not in out
+    assert "request_completed" not in out
+
+    async def boom(request):
+        raise RuntimeError("probe exploded")
+
+    with pytest.raises(RuntimeError, match="probe exploded"):
+        asyncio.run(middleware.dispatch(_request(path="/health/ready"), boom))
+
+    out = capsys.readouterr().out
+    assert "request_failed" in out
     assert get_request_id() is None
     assert get_correlation_id() is None
 

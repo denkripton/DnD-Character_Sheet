@@ -20,14 +20,16 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             request.headers.get(REQUEST_ID_HEADER),
             request.headers.get(CORRELATION_ID_HEADER),
         )
+        should_log = not request.url.path.startswith("/health")
         started = time.monotonic()
-        structlog.get_logger("app.http").info(
-            "request_started",
-            method=request.method,
-            path=request.url.path,
-            request_id=get_request_id(),
-            correlation_id=get_correlation_id(),
-        )
+        if should_log:
+            structlog.get_logger("app.http").info(
+                "request_started",
+                method=request.method,
+                path=request.url.path,
+                request_id=get_request_id(),
+                correlation_id=get_correlation_id(),
+            )
         try:
             response = await call_next(request)
         except Exception:
@@ -41,15 +43,16 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             )
             reset_request_context()
             raise
-        structlog.get_logger("app.http").info(
-            "request_completed",
-            method=request.method,
-            path=request.url.path,
-            status_code=response.status_code,
-            duration_ms=round((time.monotonic() - started) * 1000),
-            request_id=get_request_id(),
-            correlation_id=get_correlation_id(),
-        )
+        if should_log:
+            structlog.get_logger("app.http").info(
+                "request_completed",
+                method=request.method,
+                path=request.url.path,
+                status_code=response.status_code,
+                duration_ms=round((time.monotonic() - started) * 1000),
+                request_id=get_request_id(),
+                correlation_id=get_correlation_id(),
+            )
         response.headers[REQUEST_ID_HEADER] = get_request_id() or ""
         response.headers[CORRELATION_ID_HEADER] = get_correlation_id() or ""
         reset_request_context()

@@ -32,6 +32,8 @@ class Settings(BaseSettings):
 
     CHARACTER_GENERATION_DAILY_LIMIT: int = 5
 
+    HEALTH_CHECK_TIMEOUT_SECONDS: float = 2.0
+
     RABBITMQ_URL: str
     RABBITMQ_EXCHANGE: str
     RABBITMQ_QUEUE_PREFIX: str

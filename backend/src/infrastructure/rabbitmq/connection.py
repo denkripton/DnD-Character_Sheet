@@ -68,6 +68,25 @@ class RabbitMQConnection:
         async with self._channel_pool.acquire() as channel:
             yield channel
 
+    async def health_check(self) -> bool:
+        if not self.is_connected or self._connection is None:
+            structlog.get_logger(__name__).warning(
+                "rabbitmq_health_check_failed",
+                error_type="Disconnected",
+            )
+            return False
+        try:
+            channel = await self._connection.channel()
+            await channel.close()
+        except (OSError, aio_pika.exceptions.AMQPError) as exc:
+            structlog.get_logger(__name__).warning(
+                "rabbitmq_health_check_failed",
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+            return False
+        return True
+
     async def close(self) -> None:
         self._closed = True
         channel_pool, self._channel_pool = self._channel_pool, None

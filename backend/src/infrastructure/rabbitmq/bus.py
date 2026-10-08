@@ -35,6 +35,9 @@ class RabbitMQMessageBus(MessageBus):
         await self._consumer.close()
         await self._connection.close()
 
+    async def health_check(self) -> bool:
+        return await self._connection.health_check()
+
     async def publish(self, envelope: MessageEnvelope, routing_key: str) -> None:
         await self._publisher.publish(envelope, routing_key)
 
