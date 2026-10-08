@@ -67,7 +67,7 @@ class FakeState:
         self.data.update(kwargs)
 
     async def set_state(self, state=None):
-        self._state = None if state is None else state.state
+        self._state = None if state is None else getattr(state, "state", state)
 
     async def get_state(self):
         return self._state
@@ -80,16 +80,26 @@ class FakeState:
 class FakeCreationService:
     def __init__(self):
         self.generated = []
+        self.generation_selections = []
         self.saved_backstories = []
         self.sequence = 0
         self.fail_with = None
+        self.ai_catalog = [{"name": "gemini", "models": ["gemini-2.5-flash"]}]
 
-    async def generate_backstory(self, auth, character_id, prompt=None):
+    async def generate_backstory(
+        self, auth, character_id, prompt=None, model=None, provider=None
+    ):
         if self.fail_with is not None:
             raise self.fail_with
         self.generated.append((character_id, prompt))
+        self.generation_selections.append((model, provider))
         self.sequence += 1
         return f"Story version {self.sequence}."
+
+    async def get_ai_catalog(self, auth):
+        if self.fail_with is not None:
+            raise self.fail_with
+        return self.ai_catalog
 
     async def save_backstory(self, auth, character_id, backstory):
         if self.fail_with is not None:
@@ -155,6 +165,57 @@ def test_start_from_hub_shows_prompt_options():
     assert _callback_data(_keyboard(callback.message)) == _callback_data(
         backstory_prompt_keyboard()
     )
+
+
+def test_model_catalog_can_be_selected_for_backstory_generation():
+    state = _hub_state()
+    service = FakeCreationService()
+    asyncio.run(
+        handle_backstory_callback(_callback("bs:start"), state, service)
+    )
+
+    picker = _callback("bs:models")
+    asyncio.run(handle_backstory_callback(picker, state, service))
+
+    assert state.state == BackstoryStates.model_selection.state
+    picker.answer.assert_awaited_once_with()
+    model_callback = _callback("bs:model:gemini:gemini-2.5-flash")
+    asyncio.run(handle_backstory_callback(model_callback, state, service))
+
+    assert state.state == BackstoryStates.prompt.state
+    assert state.data["ai_provider"] == "gemini"
+    assert state.data["ai_model"] == "gemini-2.5-flash"
+    assert "gemini-2.5-flash" in _last_answer(model_callback.message)
+
+    asyncio.run(
+        handle_backstory_callback(_callback("bs:gen"), state, service)
+    )
+
+    assert service.generation_selections == [
+        ("gemini-2.5-flash", "gemini")
+    ]
+
+
+def test_model_callback_rejects_model_not_in_backend_catalog():
+    state = FakeState(
+        data={
+            "auth": dict(AUTH),
+            "character_id": "char-1",
+            "ai_catalog": [
+                {"name": "gemini", "models": ["gemini-2.5-flash"]}
+            ],
+            "model_selection_return_state": BackstoryStates.prompt.state,
+        },
+        state=BackstoryStates.model_selection,
+    )
+    callback = _callback("bs:model:gemini:unknown-model")
+
+    asyncio.run(
+        handle_backstory_callback(callback, state, FakeCreationService())
+    )
+
+    callback.answer.assert_awaited_with(CHARACTER_STALE_TEXT, show_alert=True)
+    assert "ai_model" not in state.data
 
 
 def test_start_without_character_id_alerts_not_started():

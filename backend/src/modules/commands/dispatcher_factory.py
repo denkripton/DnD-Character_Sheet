@@ -9,6 +9,7 @@ from src.messaging.enums.constants import AUTH_USER_ID_HEADER
 from src.messaging.interfaces import MessagePublisher
 from src.messaging.messages import MessageEnvelope
 from src.messaging.security import require_identity_headers, verify_command
+from src.modules.ai.dependencies import get_ai_registry
 from src.modules.character.backstory import character_backstory_service_scope
 from src.modules.character.backstory.schemas import BackstoryCreateSchema
 from src.modules.character.backstory.service import BackstoryService
@@ -111,6 +112,10 @@ def build_bot_command_dispatcher(
             max_age_seconds,
         ),
     )
+    dispatcher.register(
+        MessageType.AI_CATALOG,
+        _require_authenticated(_handle_ai_catalog(producer), secret, max_age_seconds),
+    )
     return dispatcher
 
 
@@ -189,6 +194,26 @@ def _backstory_saved_payload(result) -> dict:
     if isinstance(backstory, str):
         return {"ok": True, "backstory": backstory}
     return {"ok": True}
+
+
+def _handle_ai_catalog(producer: MessagePublisher):
+    async def handle(envelope: MessageEnvelope) -> None:
+        try:
+            registry = get_ai_registry()
+            payload = {
+                "ok": True,
+                "providers": [
+                    {"name": provider, "models": models}
+                    for provider, models in registry.provider_models.items()
+                ],
+            }
+        except ServiceError as exc:
+            payload = {"ok": False, "error": str(exc)}
+        await _publish_response(
+            producer, MessageType.AI_CATALOG_RESULT, envelope, payload
+        )
+
+    return handle
 
 
 async def _draft_call(

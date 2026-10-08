@@ -90,17 +90,45 @@ class CharacterCreationService:
         return {"character_id": character_id, "character": character}
 
     async def generate_backstory(
-        self, auth: dict, character_id: str, prompt: str | None = None
+        self,
+        auth: dict,
+        character_id: str,
+        prompt: str | None = None,
+        model: str | None = None,
+        provider: str | None = None,
     ) -> str:
+        request = {"character_id": character_id, "prompt": prompt}
+        if model is not None:
+            request["model"] = model
+        if provider is not None:
+            request["provider"] = provider
         payload = await self._request(
             MessageType.CHARACTER_GENERATE_BACKSTORY,
-            {"character_id": character_id, "prompt": prompt},
+            request,
             auth,
         )
         backstory = payload.get("backstory")
         if not isinstance(backstory, str) or not backstory:
             raise CharacterCreationError(FALLBACK_ERROR_TEXT)
         return backstory
+
+    async def get_ai_catalog(self, auth: dict) -> list[dict[str, object]]:
+        payload = await self._request(MessageType.AI_CATALOG, {}, auth)
+        providers = payload.get("providers")
+        if not isinstance(providers, list):
+            raise CharacterCreationError(FALLBACK_ERROR_TEXT)
+        catalog = []
+        for provider in providers:
+            if not isinstance(provider, dict):
+                raise CharacterCreationError(FALLBACK_ERROR_TEXT)
+            name = provider.get("name")
+            models = provider.get("models")
+            if not isinstance(name, str) or not isinstance(models, list):
+                raise CharacterCreationError(FALLBACK_ERROR_TEXT)
+            if not all(isinstance(model, str) for model in models):
+                raise CharacterCreationError(FALLBACK_ERROR_TEXT)
+            catalog.append({"name": name, "models": models})
+        return catalog
 
     async def save_backstory(
         self, auth: dict, character_id: str, backstory: str

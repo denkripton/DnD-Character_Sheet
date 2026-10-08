@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -551,6 +552,30 @@ def test_backstory_generate_forwards_model_and_provider():
     assert event.payload["ok"] is True
     assert env.ai.calls[0]["model"] == "gemini-2.5-pro"
     assert env.ai.calls[0]["provider"] == "gemini"
+
+
+def test_ai_catalog_command_returns_available_models(monkeypatch):
+    env = _environment()
+    monkeypatch.setattr(
+        "src.modules.commands.dispatcher_factory.get_ai_registry",
+        lambda: SimpleNamespace(
+            provider_models={"gemini": ["gemini-2.5-flash", "gemini-2.5-pro"]}
+        ),
+    )
+
+    event, routing_key = _dispatch(env, MessageType.AI_CATALOG)
+
+    assert event.type == MessageType.AI_CATALOG_RESULT.value
+    assert routing_key == "events.ai.catalog_result"
+    assert event.payload == {
+        "ok": True,
+        "providers": [
+            {
+                "name": "gemini",
+                "models": ["gemini-2.5-flash", "gemini-2.5-pro"],
+            }
+        ],
+    }
 
 
 def test_backstory_generate_user_rate_limited():

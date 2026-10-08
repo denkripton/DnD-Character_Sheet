@@ -1,4 +1,4 @@
-from app.utils.greeting import FALLBACK_NAME, greeting_text
+from app.modules.start.greeting import FALLBACK_NAME, greeting_text
 
 
 def test_greeting_uses_name():

@@ -12,6 +12,7 @@ class MessageType(str, Enum):
     CHARACTER_UPDATE_PARAMETER = "character.update_parameter.command"
     CHARACTER_DELETE = "character.delete.command"
     CHARACTER_STATS = "character.stats.command"
+    AI_CATALOG = "ai.catalog.command"
 
     CHARACTER_CREATED = "character.created.event"
     CHARACTER_UPDATED = "character.updated.event"
@@ -21,3 +22,4 @@ class MessageType(str, Enum):
     CHARACTER_SAVED = "character.saved.event"
     CHARACTER_BACKSTORY_GENERATED = "character.backstory_generated.event"
     CHARACTER_BACKSTORY_SAVED = "character.backstory_saved.event"
+    AI_CATALOG_RESULT = "ai.catalog_result.event"

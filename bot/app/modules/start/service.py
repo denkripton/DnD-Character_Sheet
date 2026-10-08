@@ -1,5 +1,5 @@
 from app.modules.start.schemas.user import UserIdentity
-from app.utils.greeting import greeting_text
+from app.modules.start.greeting import greeting_text
 
 
 class StartService:

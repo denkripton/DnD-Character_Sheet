@@ -334,6 +334,44 @@ def test_generate_backstory_without_prompt_sends_none():
     assert call["payload"] == {"character_id": "char-1", "prompt": None}
 
 
+def test_generate_backstory_sends_selected_model_and_provider():
+    service, rabbit = _service(
+        payload={"ok": True, "backstory": "A wandering hero."}
+    )
+
+    asyncio.run(
+        service.generate_backstory(
+            AUTH,
+            "char-1",
+            prompt="sworn enemy",
+            model="gemini-2.5-flash",
+            provider="gemini",
+        )
+    )
+
+    assert rabbit.calls[0]["payload"] == {
+        "character_id": "char-1",
+        "prompt": "sworn enemy",
+        "model": "gemini-2.5-flash",
+        "provider": "gemini",
+    }
+
+
+def test_get_ai_catalog_requests_backend_catalog():
+    service, rabbit = _service(
+        payload={
+            "ok": True,
+            "providers": [{"name": "gemini", "models": ["gemini-2.5-flash"]}],
+        }
+    )
+
+    catalog = asyncio.run(service.get_ai_catalog(AUTH))
+
+    assert catalog == [{"name": "gemini", "models": ["gemini-2.5-flash"]}]
+    assert rabbit.calls[0]["message_type"] == MessageType.AI_CATALOG
+    assert rabbit.calls[0]["payload"] == {}
+
+
 def test_generate_backstory_backend_rejection_raises_character_creation_error():
     service, _ = _service(
         payload={"ok": False, "error": "Daily limit reached: 5/5"}

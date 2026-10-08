@@ -9,6 +9,8 @@ CALLBACK_EDIT = f"{CALLBACK_PREFIX}:edit"
 CALLBACK_CANCEL = f"{CALLBACK_PREFIX}:cancel"
 CALLBACK_CLOSE = f"{CALLBACK_PREFIX}:close"
 CALLBACK_BACK = f"{CALLBACK_PREFIX}:back"
+CALLBACK_MODELS = f"{CALLBACK_PREFIX}:models"
+CALLBACK_MODEL = f"{CALLBACK_PREFIX}:model"
 
 
 def backstory_hub_keyboard() -> InlineKeyboardMarkup:
@@ -34,6 +36,11 @@ def backstory_prompt_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
+                    text="🤖 Choose AI model", callback_data=CALLBACK_MODELS
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="🎲 Generate", callback_data=CALLBACK_GENERATE
                 )
             ],
@@ -52,6 +59,11 @@ def backstory_prompt_keyboard() -> InlineKeyboardMarkup:
 def backstory_review_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🤖 Choose AI model", callback_data=CALLBACK_MODELS
+                )
+            ],
             [
                 InlineKeyboardButton(
                     text="✅ Accept", callback_data=CALLBACK_ACCEPT
@@ -85,3 +97,22 @@ def backstory_edit_keyboard() -> InlineKeyboardMarkup:
             ]
         ]
     )
+
+
+def backstory_model_keyboard(
+    providers: list[dict[str, object]],
+) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"{model} ({provider['name']})",
+                callback_data=f"{CALLBACK_MODEL}:{provider['name']}:{model}",
+            )
+        ]
+        for provider in providers
+        for model in provider["models"]
+    ]
+    rows.append(
+        [InlineKeyboardButton(text="⬅️ Back", callback_data=CALLBACK_BACK)]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
