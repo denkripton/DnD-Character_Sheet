@@ -14,6 +14,9 @@ class BotConfig(BaseSettings):
     BOT_MESSAGE_MAX_AGE_SECONDS: int = 300
 
     LOG_LEVEL: str = "INFO"
+    ENVIRONMENT: str = "development"
+    SERVICE_NAME: str = "bot"
+    LOG_JSON: bool = True
 
     RABBITMQ_URL: str = "amqp://backend:backend@rabbitmq:5672/"
     RABBITMQ_EXCHANGE: str = "dnd.events"

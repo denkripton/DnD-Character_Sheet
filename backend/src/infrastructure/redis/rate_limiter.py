@@ -1,13 +1,11 @@
-import logging
 import random
 import time
 from collections.abc import Callable
 
+import structlog
 from redis.asyncio import Redis
 
 from src.utils.interfaces.rate_limiter import RateLimiter, RateLimitResult
-
-logger = logging.getLogger(__name__)
 
 
 class RedisRateLimiter(RateLimiter):
@@ -33,11 +31,11 @@ class RedisRateLimiter(RateLimiter):
                 pipe.zrange(key, 0, 0, withscores=True)
                 _, current_count, _, _, oldest = await pipe.execute()
         except Exception as exc:
-            logger.warning(
-                "Redis rate limiting failed for category %s user %s: %s",
-                category,
-                user_id,
-                exc,
+            structlog.get_logger(__name__).warning(
+                "rate_limiter_unavailable",
+                category=category,
+                user_id=user_id,
+                error=str(exc),
             )
             return RateLimitResult(
                 allowed=True,

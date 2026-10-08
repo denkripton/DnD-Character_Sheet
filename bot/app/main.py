@@ -19,9 +19,12 @@ async def close_storage(storage: BaseStorage) -> None:
 
 async def main() -> None:
     config = load_config()
-    configure_logging(config.LOG_LEVEL)
-    logger = structlog.get_logger("app.main")
-
+    configure_logging(
+        config.LOG_LEVEL,
+        service=config.SERVICE_NAME,
+        environment=config.ENVIRONMENT,
+        json_output=config.LOG_JSON,
+    )
     bot = create_bot(config)
     dispatcher = create_dispatcher(config)
     rabbit = build_rabbitmq_client(config)
@@ -29,13 +32,13 @@ async def main() -> None:
     dispatcher["creation_service"] = CharacterCreationService(rabbit)
 
     await rabbit.start()
-    logger.info("bot_started")
+    structlog.get_logger("app.main").info("bot_started")
     try:
         await dispatcher.start_polling(bot, close_bot_session=True)
     finally:
         await rabbit.close()
         await close_storage(dispatcher.storage)
-        logger.info("bot_stopped")
+        structlog.get_logger("app.main").info("bot_stopped")
 
 
 def run() -> None:

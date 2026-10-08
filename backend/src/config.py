@@ -1,9 +1,8 @@
-import logging
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-logging.basicConfig(level=logging.INFO)
+from src.utils.logging import configure_logging
 
 
 class Settings(BaseSettings):
@@ -26,6 +25,11 @@ class Settings(BaseSettings):
     CACHE_TTL: int = 300
     CACHE_METADATA_TTL: int = 3600
 
+    ENVIRONMENT: str = "development"
+    SERVICE_NAME: str = "backend"
+    LOG_LEVEL: str = "INFO"
+    LOG_JSON: bool = True
+
     CHARACTER_GENERATION_DAILY_LIMIT: int = 5
 
     RABBITMQ_URL: str
@@ -44,4 +48,10 @@ class Settings(BaseSettings):
 )
 
 settings = Settings()
-logger = logging.getLogger(__name__)
+
+configure_logging(
+    level=settings.LOG_LEVEL,
+    service=settings.SERVICE_NAME,
+    environment=settings.ENVIRONMENT,
+    json_output=settings.LOG_JSON,
+)

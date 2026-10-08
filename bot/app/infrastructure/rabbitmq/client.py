@@ -50,7 +50,6 @@ class BotRabbitMQClient:
                 prefetch_count=config.RABBITMQ_PREFETCH_COUNT,
                 max_retries=config.RABBITMQ_MAX_RETRIES,
             )
-        self._logger = structlog.get_logger("app.rabbitmq")
 
     @property
     def bus(self) -> MessageBus:
@@ -63,12 +62,14 @@ class BotRabbitMQClient:
     async def start(self) -> None:
         await self._bus.start()
         await self._subscribe_events()
-        self._logger.info("rabbitmq_started", events_queue=self.events_queue)
+        structlog.get_logger("app.rabbitmq").info(
+            "rabbitmq_started", events_queue=self.events_queue
+        )
 
     async def close(self) -> None:
         if self._owns_bus:
             await self._bus.close()
-        self._logger.info("rabbitmq_stopped")
+        structlog.get_logger("app.rabbitmq").info("rabbitmq_stopped")
 
     def on_event(self, handler: MessageHandler) -> None:
         self._event_handlers.append(handler)
@@ -114,18 +115,25 @@ class BotRabbitMQClient:
         **kwargs,
     ) -> MessageEnvelope:
         correlation_id = correlation_id or uuid4()
+        structlog.contextvars.bind_contextvars(correlation_id=str(correlation_id))
         future: asyncio.Future = asyncio.get_running_loop().create_future()
         self._pending[correlation_id] = future
         try:
-            await self.publish_command(
+            envelope = await self.publish_command(
                 message_type,
                 payload,
                 correlation_id=correlation_id,
                 **kwargs,
             )
+            structlog.get_logger("app.rabbitmq").info(
+                "command_sent",
+                message_type=envelope.type,
+                correlation_id=str(correlation_id),
+            )
             return await asyncio.wait_for(future, timeout)
         finally:
             self._pending.pop(correlation_id, None)
+            structlog.contextvars.unbind_contextvars("correlation_id")
 
     async def _subscribe_events(self) -> None:
         await self._bus.subscribe(
@@ -135,7 +143,7 @@ class BotRabbitMQClient:
         )
 
     async def _on_event_envelope(self, envelope: MessageEnvelope) -> None:
-        self._logger.info(
+        structlog.get_logger("app.rabbitmq").info(
             "event_received",
             message_type=envelope.type,
             correlation_id=str(envelope.correlation_id) if envelope.correlation_id else None,

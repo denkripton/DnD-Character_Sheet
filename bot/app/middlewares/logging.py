@@ -23,17 +23,16 @@ class LoggingMiddleware(BaseMiddleware):
         if username is not None:
             context["username"] = username
         structlog.contextvars.bind_contextvars(**context)
-        logger = structlog.get_logger("app.middleware")
         started = time.monotonic()
         try:
             result = await handler(event, data)
-            logger.info(
+            structlog.get_logger("app.middleware").info(
                 "update_handled",
                 duration_ms=round((time.monotonic() - started) * 1000),
             )
             return result
         except Exception:
-            logger.error(
+            structlog.get_logger("app.middleware").exception(
                 "update_failed",
                 duration_ms=round((time.monotonic() - started) * 1000),
             )

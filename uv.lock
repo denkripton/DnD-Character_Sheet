@@ -276,6 +276,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyjwt" },
     { name = "redis" },
+    { name = "structlog" },
     { name = "uvicorn" },
 ]
 
@@ -297,6 +298,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.13.1" },
     { name = "pyjwt", specifier = ">=2.12.1" },
     { name = "redis", specifier = ">=5.0" },
+    { name = "structlog", specifier = ">=25.0" },
     { name = "uvicorn", specifier = ">=0.44.0" },
 ]
 

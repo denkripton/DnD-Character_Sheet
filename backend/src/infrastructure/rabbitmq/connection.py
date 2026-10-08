@@ -1,15 +1,13 @@
 import asyncio
-import logging
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 
 import aio_pika
+import structlog
 from aio_pika.abc import AbstractChannel, AbstractConnection
 from aio_pika.pool import Pool
 
 from src.utils.exceptions import RabbitMQConnectionError
-
-logger = logging.getLogger(__name__)
 
 ConnectionFactory = Callable[[str], Awaitable[AbstractConnection]]
 
@@ -44,10 +42,10 @@ class RabbitMQConnection:
             try:
                 self._connection = await self._connect_factory(self._url)
             except (TimeoutError, OSError, aio_pika.exceptions.AMQPError) as exc:
-                logger.warning(
-                    "RabbitMQ connection failed (%s); retrying in %ss",
-                    exc,
-                    self._reconnect_interval_seconds,
+                structlog.get_logger(__name__).warning(
+                    "rabbitmq_connection_failed",
+                    error=str(exc),
+                    reconnect_interval_seconds=self._reconnect_interval_seconds,
                 )
                 await asyncio.sleep(self._reconnect_interval_seconds)
             else:
@@ -55,7 +53,7 @@ class RabbitMQConnection:
                     self._open_channel,
                     max_size=self._max_channel_pool_size,
                 )
-                logger.info("RabbitMQ connected")
+                structlog.get_logger(__name__).info("rabbitmq_connected")
 
     async def _open_channel(self) -> AbstractChannel:
         if self._connection is None:

@@ -1,6 +1,6 @@
-import logging
 from contextlib import asynccontextmanager
 
+import structlog
 from fastapi import FastAPI
 
 from src.config import settings
@@ -13,6 +13,7 @@ from src.modules.character.router import character_router
 from src.modules.commands.dispatcher_factory import build_bot_command_dispatcher
 from src.utils import register_exception_handlers
 from src.utils.interfaces.application import Application
+from src.utils.logging.middleware import RequestLoggingMiddleware
 from src.utils.metadata import (
     contact,
     openapi_url,
@@ -21,9 +22,6 @@ from src.utils.metadata import (
     title,
     version,
 )
-
-logger = logging.getLogger(__name__)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -47,7 +45,7 @@ async def lifespan(app: FastAPI):
     try:
         await redis.ping()
     except Exception as exc:
-        logger.warning("Redis is not reachable: %s", exc)
+        structlog.get_logger(__name__).warning("redis_unreachable", error=str(exc))
     app.state.redis_client = redis
     app.state.cache = cache
     app.state.rate_limiter = rate_limiter
@@ -80,6 +78,7 @@ class API(Application):
             contact=self.contact,
             lifespan=lifespan,
         )
+        self.app.add_middleware(RequestLoggingMiddleware)
         for router in self.routers:
             self.app.include_router(router=router)
         register_exception_handlers(app=self.app)

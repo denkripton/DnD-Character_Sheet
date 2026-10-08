@@ -1,5 +1,7 @@
 import asyncio
+import json
 
+import structlog.contextvars
 from app.config import BotConfig
 from app.infrastructure.rabbitmq.client import BotRabbitMQClient
 from app.messaging import (
@@ -8,6 +10,7 @@ from app.messaging import (
     MessageType,
     create_message,
 )
+from app.utils.logging import configure_logging
 
 
 class FakeBus:
@@ -15,6 +18,7 @@ class FakeBus:
         self.published = []
         self.subscriptions = []
         self.publish_error = publish_error
+        self.contexts = []
 
     async def start(self):
         pass
@@ -26,6 +30,7 @@ class FakeBus:
         if self.publish_error is not None:
             raise self.publish_error
         self.published.append((envelope, routing_key))
+        self.contexts.append(dict(structlog.contextvars.get_contextvars()))
 
     async def subscribe(self, queue_name, routing_keys, handler):
         self.subscriptions.append((queue_name, list(routing_keys), handler))
@@ -163,3 +168,44 @@ def test_request_signs_command_when_secret_configured():
         await task
 
     asyncio.run(flow())
+
+
+def test_request_binds_correlation_context_and_logs_command(capsys):
+    configure_logging("INFO", service="bot", environment="test", json_output=True)
+
+    async def flow():
+        bus = FakeBus()
+        client = _client(bus)
+        await client.start()
+
+        task = asyncio.create_task(
+            client.request(MessageType.CHARACTER_CREATE, {}, timeout=5)
+        )
+        await asyncio.sleep(0.01)
+
+        (command, _), = bus.published
+        assert bus.contexts[0]["correlation_id"] == str(command.correlation_id)
+
+        response = create_message(
+            MessageType.CHARACTER_CREATED,
+            {"ok": True},
+            correlation_id=command.correlation_id,
+        )
+        _, _, handler = bus.subscriptions[0]
+        await handler(response)
+        await task
+        return structlog.contextvars.get_contextvars()
+
+    context_after = asyncio.run(flow())
+
+    assert "correlation_id" not in context_after
+
+    records = [
+        json.loads(line)
+        for line in capsys.readouterr().out.splitlines()
+        if line.strip()
+    ]
+    command_sent = next(r for r in records if r["event"] == "command_sent")
+    assert command_sent["message_type"] == "character.create.command"
+    assert command_sent["service"] == "bot"
+    assert command_sent["environment"] == "test"
