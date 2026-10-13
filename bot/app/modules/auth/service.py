@@ -1,6 +1,6 @@
 from app.infrastructure.http.client import BackendApiClient
+from app.infrastructure.http.exceptions import BackendAuthError
 from app.modules.auth.schemas.context import AuthContext
-from app.utils.exceptions import BackendAuthError
 
 PROVIDER_TELEGRAM = "telegram"
 

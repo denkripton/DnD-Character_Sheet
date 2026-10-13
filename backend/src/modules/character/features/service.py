@@ -4,7 +4,7 @@ from src.modules.character.features.schemas import (
     FeatureReadSchema,
 )
 from src.infrastructure.redis import cache
-from src.utils.unit_of_work import UnitOfWork
+from src.databases.unit_of_work import UnitOfWork
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.repositories import FeatureRepository
 from src.modules.character.utils.random_features import generate_random_features

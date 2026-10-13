@@ -10,7 +10,7 @@ from src.modules.auth.models import User
 from src.modules.auth.repository import UserRepository
 from src.modules.character.models import Character
 from src.modules.character.repositories import CharacterRepository
-from src.utils.unit_of_work import UnitOfWork
+from src.databases.unit_of_work import UnitOfWork
 
 
 def _build_session():

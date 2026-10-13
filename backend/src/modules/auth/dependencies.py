@@ -7,7 +7,7 @@ from src.modules.auth.external_service import ExternalAuthService
 from src.modules.auth.repository import ExternalIdentityRepository, UserRepository
 from src.modules.auth.service import UserService
 from src.modules.auth.utils import JWT
-from src.utils.unit_of_work import UnitOfWork
+from src.databases.unit_of_work import UnitOfWork
 
 user_repository = RepoFactory(repo=UserRepository)
 external_identity_repository = RepoFactory(repo=ExternalIdentityRepository)

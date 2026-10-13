@@ -8,7 +8,7 @@ from src.modules.character.dependencies import (
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.proficiencies.service import ProficiencyService
 from src.modules.character.repositories import ProficiencyRepository
-from src.utils.unit_of_work import UnitOfWork
+from src.databases.unit_of_work import UnitOfWork
 
 
 def get_proficiency_service(

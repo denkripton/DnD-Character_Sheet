@@ -1,7 +1,7 @@
 from src.config import settings
 from src.utils.exceptions import RateLimitExceeded, ServiceError
 from src.infrastructure.redis import cache
-from src.utils.unit_of_work import UnitOfWork
+from src.databases.unit_of_work import UnitOfWork
 from src.modules.auth.repository import UserRepository
 from src.modules.character.base.enums.generation_limits import GenerationLimits
 from src.modules.character.base.schemas import (

@@ -6,7 +6,7 @@ from src.infrastructure.rabbitmq.connection import RabbitMQConnection
 from src.infrastructure.rabbitmq.publisher import RabbitMQPublisher
 from src.infrastructure.rabbitmq.topology import Topology
 from src.infrastructure.rabbitmq.utils import properties_from_message, to_envelope
-from src.messaging.enums.constants import RETRY_COUNT_HEADER
+from src.messaging.enums.constants import MessageHeader
 from src.messaging.interfaces import MessageConsumer, MessageHandler
 from src.messaging.messages import MessageEnvelope
 from src.utils.exceptions import SerializationError
@@ -58,7 +58,8 @@ class RabbitMQConsumer(MessageConsumer):
                 await handler(envelope)
             except Exception:
                 failed_attempts = int(
-                    (message.headers or {}).get(RETRY_COUNT_HEADER, 0) or 0
+                    (message.headers or {}).get(MessageHeader.RETRY_COUNT.value, 0)
+                    or 0
                 )
                 if failed_attempts < self._max_retries:
                     await self._publisher.publish_retry(

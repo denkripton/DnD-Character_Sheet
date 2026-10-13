@@ -5,11 +5,7 @@ import structlog
 from src.infrastructure.rabbitmq.bus import RabbitMQMessageBus
 from src.infrastructure.rabbitmq.connection import RabbitMQConnection
 from src.infrastructure.rabbitmq.topology import Topology
-from src.messaging.enums.constants.command_headers import (
-    AUTH_PROVIDER_HEADER,
-    AUTH_PROVIDER_USER_ID_HEADER,
-    AUTH_USER_ID_HEADER,
-)
+from src.messaging.enums.constants import MessageHeader
 from src.messaging.interfaces import MessageBus
 from src.messaging.security import sign_command
 
@@ -87,11 +83,11 @@ class BotRabbitMQClient:
     ) -> MessageEnvelope:
         envelope_headers = dict(headers or {})
         if provider is not None:
-            envelope_headers[AUTH_PROVIDER_HEADER] = provider
+            envelope_headers[MessageHeader.AUTH_PROVIDER.value] = provider
         if provider_user_id is not None:
-            envelope_headers[AUTH_PROVIDER_USER_ID_HEADER] = provider_user_id
+            envelope_headers[MessageHeader.AUTH_PROVIDER_USER_ID.value] = provider_user_id
         if user_id is not None:
-            envelope_headers[AUTH_USER_ID_HEADER] = user_id
+            envelope_headers[MessageHeader.AUTH_USER_ID.value] = user_id
 
         envelope = create_message(
             message_type,

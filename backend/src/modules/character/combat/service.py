@@ -3,7 +3,7 @@ from src.modules.character.combat.schemas import (
     CombatReadSchema,
 )
 from src.infrastructure.redis import cache
-from src.utils.unit_of_work import UnitOfWork
+from src.databases.unit_of_work import UnitOfWork
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.repositories import CombatRepository, StatsRepository
 from src.modules.character.utils.random_combat import generate_random_combat

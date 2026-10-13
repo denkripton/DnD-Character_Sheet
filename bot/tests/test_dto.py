@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 from app.modules.start.schemas.user import UserIdentity
-from app.utils.schemas.base_schema import BaseSchema
+from app.schemas.base import BaseSchema
 from pydantic import ValidationError
 
 

@@ -1,6 +1,6 @@
 import uuid
 
-from app.utils.schemas.base_schema import BaseSchema
+from app.schemas.base import BaseSchema
 
 
 class ExternalAuthUser(BaseSchema):

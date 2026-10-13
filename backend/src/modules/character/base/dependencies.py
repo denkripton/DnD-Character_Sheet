@@ -17,7 +17,7 @@ from src.modules.character.repositories import (
     StatsRepository,
 )
 from src.utils.interfaces.rate_limiter import RateLimiter
-from src.utils.unit_of_work import UnitOfWork
+from src.databases.unit_of_work import UnitOfWork
 
 
 def get_character_service(

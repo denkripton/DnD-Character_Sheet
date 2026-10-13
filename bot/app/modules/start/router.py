@@ -3,11 +3,11 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+from app.infrastructure.http.exceptions import BackendAuthError
 from app.modules.auth import BotAuthService
 from app.modules.start.schemas.user import UserIdentity
 from app.modules.start.service import StartService
-from app.utils.constants import AUTH_UNAVAILABLE_TEXT
-from app.utils.exceptions import BackendAuthError
+from app.presentation.messages import AUTH_UNAVAILABLE_TEXT
 
 
 async def handle_start(

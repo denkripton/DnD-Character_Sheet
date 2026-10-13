@@ -24,7 +24,7 @@ from app.modules.character.service import (
     BackendUnavailableError,
     CharacterCreationError,
 )
-from app.utils.constants import (
+from app.presentation.messages import (
     BACKSTORY_CLOSED_TEXT,
     BACKSTORY_DISCARDED_TEXT,
     BACKSTORY_EDIT_TEXT,

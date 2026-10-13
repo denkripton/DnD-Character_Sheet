@@ -12,7 +12,7 @@ from src.modules.character.utils import (
 )
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.infrastructure.redis import cache
-from src.utils.unit_of_work import UnitOfWork
+from src.databases.unit_of_work import UnitOfWork
 
 
 class StatsService:

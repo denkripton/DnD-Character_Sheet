@@ -6,7 +6,7 @@ from src.modules.character.skills.schemas import (
     SkillReadSchema,
 )
 from src.infrastructure.redis import cache
-from src.utils.unit_of_work import UnitOfWork
+from src.databases.unit_of_work import UnitOfWork
 from src.modules.character.utils.random_skills import generate_random_skills
 
 

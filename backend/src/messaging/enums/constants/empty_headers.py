@@ -1,1 +1,0 @@
-EMPTY_HEADERS: dict[str, str] = {}

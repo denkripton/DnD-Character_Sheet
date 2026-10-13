@@ -1,1 +1,0 @@
-DEAD_LETTER_ARGUMENT = "x-dead-letter-exchange"

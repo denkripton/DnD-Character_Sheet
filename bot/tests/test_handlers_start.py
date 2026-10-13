@@ -6,8 +6,8 @@ from app.modules.auth import PROVIDER_TELEGRAM, BotAuthService
 from app.modules.auth.schemas.context import AuthContext
 from app.modules.start.router import build_start_router, handle_start
 from app.modules.start.service import StartService
-from app.utils.constants import AUTH_UNAVAILABLE_TEXT
-from app.utils.exceptions import BackendAuthError
+from app.infrastructure.http.exceptions import BackendAuthError
+from app.presentation.messages import AUTH_UNAVAILABLE_TEXT
 
 
 def _message(**user_attrs):

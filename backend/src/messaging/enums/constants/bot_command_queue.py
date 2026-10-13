@@ -1,1 +1,0 @@
-BOT_COMMAND_QUEUE = "bot_commands"

@@ -12,7 +12,7 @@ from app.messaging import (
 from src.infrastructure.rabbitmq.serialization import serialize
 from src.infrastructure.rabbitmq.utils import envelope_to_properties, to_envelope
 from src.messaging.contract import messaging_route
-from src.messaging.enums.constants.command_headers import (
+from src.messaging.enums.constants import (
     AUTH_PROVIDER_HEADER,
     AUTH_PROVIDER_USER_ID_HEADER,
     AUTH_USER_ID_HEADER,

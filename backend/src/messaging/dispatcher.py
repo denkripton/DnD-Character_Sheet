@@ -5,7 +5,7 @@ import structlog
 import structlog.contextvars
 
 from src.messaging.enums import MessageType
-from src.messaging.enums.constants import AUTH_USER_ID_HEADER
+from src.messaging.enums.constants import MessageHeader
 from src.messaging.interfaces import MessageHandler
 from src.messaging.messages import MessageEnvelope
 from src.utils.exceptions import UnknownMessageTypeError
@@ -27,7 +27,7 @@ class CommandDispatcher:
             str(envelope.message_id),
             str(envelope.correlation_id) if envelope.correlation_id else None,
         )
-        user_id = envelope.headers.get(AUTH_USER_ID_HEADER)
+        user_id = envelope.headers.get(MessageHeader.AUTH_USER_ID.value)
         if user_id is not None:
             structlog.contextvars.bind_contextvars(user_id=user_id)
         started = time.monotonic()

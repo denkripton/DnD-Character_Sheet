@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from src.modules.auth.repository import ExternalIdentityRepository, UserRepository
 from src.modules.auth.utils import JWT, pw_manager
 from src.utils.exceptions import ServiceError
-from src.utils.unit_of_work import UnitOfWork
+from src.databases.unit_of_work import UnitOfWork
 
 
 class ExternalAuthService:

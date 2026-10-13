@@ -5,7 +5,7 @@ from src.infrastructure.rabbitmq.connection import RabbitMQConnection
 from src.infrastructure.rabbitmq.serialization import serialize
 from src.infrastructure.rabbitmq.topology import Topology
 from src.infrastructure.rabbitmq.utils import envelope_to_properties
-from src.messaging.enums.constants import CONTENT_TYPE_JSON, RETRY_COUNT_HEADER
+from src.messaging.enums.constants import MessageContentType, MessageHeader
 from src.messaging.interfaces import MessagePublisher
 from src.messaging.messages import MessageEnvelope
 from src.utils.exceptions import RabbitMQMessagePublishError
@@ -38,7 +38,7 @@ class RabbitMQPublisher(MessagePublisher):
             update={
                 "headers": {
                     **envelope.headers,
-                    RETRY_COUNT_HEADER: str(retry_count),
+                    MessageHeader.RETRY_COUNT.value: str(retry_count),
                 }
             }
         )
@@ -65,7 +65,7 @@ class RabbitMQPublisher(MessagePublisher):
             properties = envelope_to_properties(envelope)
             message = Message(
                 body=serialize(envelope),
-                content_type=CONTENT_TYPE_JSON,
+                content_type=MessageContentType.JSON.value,
                 delivery_mode=DeliveryMode.PERSISTENT,
                 message_id=properties.message_id,
                 correlation_id=properties.correlation_id,

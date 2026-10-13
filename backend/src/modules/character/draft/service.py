@@ -29,7 +29,7 @@ from src.modules.character.utils import (
 from src.modules.character.utils.random_character import generate_random_character
 from src.utils.exceptions import RateLimitExceeded, ServiceError
 from src.utils.interfaces.rate_limiter import RateLimiter
-from src.utils.unit_of_work import UnitOfWork
+from src.databases.unit_of_work import UnitOfWork
 
 PARAMETER_LABELS = {
     "name": "Name",

@@ -1,7 +1,7 @@
 import json
 
 import structlog
-from app.utils.logging import configure_logging
+from app.infrastructure.logging import configure_logging
 
 
 def _records(capsys) -> list[dict]:

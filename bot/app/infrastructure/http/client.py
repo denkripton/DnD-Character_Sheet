@@ -2,7 +2,7 @@ import aiohttp
 
 from app.config import BotConfig
 from app.infrastructure.http.dto import ExternalAuthResponse
-from app.utils.exceptions import BackendAuthError
+from app.infrastructure.http.exceptions import BackendAuthError
 
 AUTH_BOT_SECRET_HEADER = "X-Bot-Secret"
 EXTERNAL_AUTH_PATH = "/users/auth/external"

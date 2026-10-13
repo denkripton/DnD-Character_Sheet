@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 import structlog.contextvars
 from app.middlewares.logging import LoggingMiddleware
-from app.utils.logging import configure_logging
+from app.infrastructure.logging import configure_logging
 
 
 def _capturing_handler(captured):

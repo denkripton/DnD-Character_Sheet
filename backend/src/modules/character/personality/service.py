@@ -5,7 +5,7 @@ from src.modules.character.personality.schemas import (
 )
 from src.modules.character.repositories import PersonalityRepository
 from src.infrastructure.redis import cache
-from src.utils.unit_of_work import UnitOfWork
+from src.databases.unit_of_work import UnitOfWork
 from src.modules.character.utils.random_personality import generate_random_personality
 
 

@@ -31,7 +31,7 @@ from src.modules.character.repositories import (
 )
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.utils.interfaces.rate_limiter import RateLimiter
-from src.utils.unit_of_work import UnitOfWork
+from src.databases.unit_of_work import UnitOfWork
 
 
 def get_backstory_service(

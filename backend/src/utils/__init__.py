@@ -1,7 +1,7 @@
 import importlib
 
 _LAZY_IMPORTS = {
-    "register_exception_handlers": ("src.utils.exception_handlers", "register_exception_handlers"),
+    "register_exception_handlers": ("src.utils.exceptions.handlers", "register_exception_handlers"),
     "ErrorHandlingRoute": ("src.utils.routing.error_handling", "ErrorHandlingRoute"),
 }
 

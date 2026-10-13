@@ -1,14 +1,7 @@
 from aio_pika import ExchangeType
 from aio_pika.abc import AbstractChannel, AbstractQueue
 
-from src.messaging.enums.constants import (
-    DEAD_LETTER_ARGUMENT,
-    DEAD_LETTER_EXCHANGE_SUFFIX,
-    DEAD_LETTER_QUEUE_SUFFIX,
-    MESSAGE_TTL_ARGUMENT,
-    RETRY_EXCHANGE_SUFFIX,
-    RETRY_QUEUE_SUFFIX,
-)
+from src.messaging.enums.constants import RabbitMQArgument, TopologySuffix
 
 
 class Topology:
@@ -26,20 +19,20 @@ class Topology:
 
     @property
     def dead_letter_exchange_name(self) -> str:
-        return f"{self.exchange_name}{DEAD_LETTER_EXCHANGE_SUFFIX}"
+        return f"{self.exchange_name}{TopologySuffix.DEAD_LETTER_EXCHANGE.value}"
 
     @property
     def retry_exchange_name(self) -> str:
-        return f"{self.exchange_name}{RETRY_EXCHANGE_SUFFIX}"
+        return f"{self.exchange_name}{TopologySuffix.RETRY_EXCHANGE.value}"
 
     def queue_name(self, name: str) -> str:
         return f"{self.queue_prefix}.{name}"
 
     def dead_letter_queue_name(self, queue_name: str) -> str:
-        return f"{queue_name}{DEAD_LETTER_QUEUE_SUFFIX}"
+        return f"{queue_name}{TopologySuffix.DEAD_LETTER_QUEUE.value}"
 
     def retry_queue_name(self, queue_name: str) -> str:
-        return f"{queue_name}{RETRY_QUEUE_SUFFIX}"
+        return f"{queue_name}{TopologySuffix.RETRY_QUEUE.value}"
 
     async def declare(self, channel: AbstractChannel) -> None:
         await channel.declare_exchange(
@@ -62,14 +55,18 @@ class Topology:
         queue = await channel.declare_queue(
             name,
             durable=True,
-            arguments={DEAD_LETTER_ARGUMENT: self.dead_letter_exchange_name},
+            arguments={
+                RabbitMQArgument.DEAD_LETTER_EXCHANGE.value: self.dead_letter_exchange_name
+            },
         )
         retry_queue = await channel.declare_queue(
             self.retry_queue_name(name),
             durable=True,
             arguments={
-                MESSAGE_TTL_ARGUMENT: int(self.retry_delay_seconds * 1000),
-                DEAD_LETTER_ARGUMENT: self.exchange_name,
+                RabbitMQArgument.MESSAGE_TTL.value: int(
+                    self.retry_delay_seconds * 1000
+                ),
+                RabbitMQArgument.DEAD_LETTER_EXCHANGE.value: self.exchange_name,
             },
         )
         await retry_queue.bind(

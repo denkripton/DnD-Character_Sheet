@@ -4,7 +4,7 @@ import uuid
 import pytest
 from app.infrastructure.http.dto import ExternalAuthResponse
 from app.modules.auth import PROVIDER_TELEGRAM, BotAuthService
-from app.utils.exceptions import BackendAuthError
+from app.infrastructure.http.exceptions import BackendAuthError
 
 
 class FakeBackend:

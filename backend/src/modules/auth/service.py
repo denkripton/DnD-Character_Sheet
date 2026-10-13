@@ -5,7 +5,7 @@ from src.modules.auth.repository import UserRepository
 from src.modules.auth.schemas.user.creation import UserCreateSchema
 from src.modules.auth.schemas.user.login import UserLoginSchema
 from src.modules.auth.utils import JWT, pw_manager
-from src.utils.unit_of_work import UnitOfWork
+from src.databases.unit_of_work import UnitOfWork
 
 
 class UserService:

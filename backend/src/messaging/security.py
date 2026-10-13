@@ -3,21 +3,17 @@ import hmac
 import json
 from datetime import UTC, datetime
 
-from src.messaging.enums.constants.command_headers import (
-    AUTH_PROVIDER_HEADER,
-    AUTH_PROVIDER_USER_ID_HEADER,
-    AUTH_USER_ID_HEADER,
-    COMMAND_SIGNATURE_HEADER,
-)
-from src.messaging.enums.constants.retry import RETRY_COUNT_HEADER
+from src.messaging.enums.constants import MessageHeader
 from src.messaging.messages import MessageEnvelope
 from src.utils.exceptions import MessageAuthenticationError
 
-EXCLUDED_FROM_SIGNATURE = frozenset({COMMAND_SIGNATURE_HEADER, RETRY_COUNT_HEADER})
+EXCLUDED_FROM_SIGNATURE = frozenset(
+    {MessageHeader.COMMAND_SIGNATURE.value, MessageHeader.RETRY_COUNT.value}
+)
 IDENTITY_HEADERS = (
-    AUTH_PROVIDER_HEADER,
-    AUTH_PROVIDER_USER_ID_HEADER,
-    AUTH_USER_ID_HEADER,
+    MessageHeader.AUTH_PROVIDER.value,
+    MessageHeader.AUTH_PROVIDER_USER_ID.value,
+    MessageHeader.AUTH_USER_ID.value,
 )
 
 
@@ -65,7 +61,12 @@ def _compute_signature(envelope: MessageEnvelope, secret: str) -> str:
 def sign_command(envelope: MessageEnvelope, secret: str) -> MessageEnvelope:
     digest = _compute_signature(envelope, secret)
     return envelope.model_copy(
-        update={"headers": {**envelope.headers, COMMAND_SIGNATURE_HEADER: digest}}
+        update={
+            "headers": {
+                **envelope.headers,
+                MessageHeader.COMMAND_SIGNATURE.value: digest,
+            }
+        }
     )
 
 
@@ -77,7 +78,7 @@ def verify_command(
     if not secret:
         raise MessageAuthenticationError("Command verification is not configured")
 
-    provided = envelope.headers.get(COMMAND_SIGNATURE_HEADER)
+    provided = envelope.headers.get(MessageHeader.COMMAND_SIGNATURE.value)
     if not provided:
         raise MessageAuthenticationError("Command is missing signature")
 

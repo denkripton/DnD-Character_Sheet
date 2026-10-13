@@ -9,7 +9,7 @@ from app.infrastructure.http.client import (
     EXTERNAL_AUTH_PATH,
     BackendApiClient,
 )
-from app.utils.exceptions import BackendAuthError
+from app.infrastructure.http.exceptions import BackendAuthError
 
 
 def _config(**overrides):

@@ -10,7 +10,7 @@ from src.modules.character.repositories import (
     CharacterRepository,
     StatsRepository,
 )
-from src.utils.unit_of_work import UnitOfWork
+from src.databases.unit_of_work import UnitOfWork
 
 
 @asynccontextmanager

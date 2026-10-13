@@ -10,7 +10,7 @@ from app.messaging import (
     MessageType,
     create_message,
 )
-from app.utils.logging import configure_logging
+from app.infrastructure.logging import configure_logging
 
 
 class FakeBus:

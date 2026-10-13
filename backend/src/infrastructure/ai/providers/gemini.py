@@ -4,7 +4,7 @@ from typing import ClassVar
 from google.genai import Client, types
 from google.genai import errors as genai_errors
 
-from src.modules.ai.enums import GEMINI_SUPPORTED_MODELS, AIProviderName
+from src.modules.ai.enums import AIProviderName, GeminiModel
 from src.utils.exceptions import (
     AIProviderAuthError,
     AIProviderError,
@@ -15,7 +15,7 @@ from src.utils.exceptions import (
 
 class GeminiProvider:
     name = AIProviderName.GEMINI
-    supported_models: ClassVar[list[str]] = list(GEMINI_SUPPORTED_MODELS)
+    supported_models: ClassVar[list[str]] = [model.value for model in GeminiModel]
 
     def __init__(self, api_key: str, timeout_seconds: float = 30.0, client=None):
         self._client = client if client is not None else Client(api_key=api_key)

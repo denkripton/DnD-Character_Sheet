@@ -53,7 +53,7 @@ from app.modules.character.steps import (
     stats_method_prompt,
     step_for_position,
 )
-from app.utils.constants import (
+from app.presentation.messages import (
     CHARACTER_AUTH_REQUIRED_TEXT,
     CHARACTER_CANCELLED_TEXT,
     CHARACTER_EMPTY_INPUT_TEXT,

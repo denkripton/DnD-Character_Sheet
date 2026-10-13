@@ -8,7 +8,7 @@ from src.modules.character.base.enums.generation_limits import GenerationLimits
 from src.modules.character.base.schemas import CharacterCreateSchema
 from src.modules.character.base.service import CharacterService
 from src.modules.character.models import Character
-from src.utils.exception_handlers import rate_limit_exceeded_handler
+from src.utils.exceptions.handlers import rate_limit_exceeded_handler
 from src.utils.interfaces.rate_limiter import RateLimitResult
 from tests.utils import FakeRepo, FakeUnitOfWork, build_guard
 

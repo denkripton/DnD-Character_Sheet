@@ -11,7 +11,7 @@ from src.infrastructure.redis import cache, rate_limiter, redis
 from src.messaging.interfaces import MessageBus
 from src.utils.interfaces.cache import CacheRepository
 from src.utils.interfaces.rate_limiter import RateLimiter
-from src.utils.unit_of_work import UnitOfWork
+from src.databases.unit_of_work import UnitOfWork
 
 
 async def get_session() -> AsyncSession:

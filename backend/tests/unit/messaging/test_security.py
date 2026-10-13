@@ -5,13 +5,13 @@ from uuid import uuid4
 
 import pytest
 from src.messaging.enums import MessageType
-from src.messaging.enums.constants.command_headers import (
+from src.messaging.enums.constants import (
     AUTH_PROVIDER_HEADER,
     AUTH_PROVIDER_USER_ID_HEADER,
     AUTH_USER_ID_HEADER,
     COMMAND_SIGNATURE_HEADER,
 )
-from src.messaging.enums.constants.retry import RETRY_COUNT_HEADER
+from src.messaging.enums.constants import RETRY_COUNT_HEADER
 from src.messaging.messages import MessageEnvelope
 from src.messaging.security import (
     require_identity_headers,

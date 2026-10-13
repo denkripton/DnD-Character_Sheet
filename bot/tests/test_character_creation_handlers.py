@@ -45,7 +45,7 @@ from app.modules.character.steps import (
     prompt_for,
     stats_entry_prompt,
 )
-from app.utils.constants import (
+from app.presentation.messages import (
     CHARACTER_AUTH_REQUIRED_TEXT,
     CHARACTER_CANCELLED_TEXT,
     CHARACTER_EMPTY_INPUT_TEXT,

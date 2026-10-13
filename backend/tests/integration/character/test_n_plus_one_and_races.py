@@ -30,7 +30,7 @@ from src.modules.character.repositories import (
 from src.modules.character.stats.schemas import StatsCreateSchema
 from src.modules.character.stats.service import StatsService
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
-from src.utils.unit_of_work import UnitOfWork
+from src.databases.unit_of_work import UnitOfWork
 from tests.utils import (
     FakeRepo,
     FakeUnitOfWork,

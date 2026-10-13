@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from src.config import settings
 from src.dependencies import get_message_bus
 from src.infrastructure.redis import cache, rate_limiter, redis
-from src.messaging.enums.constants import BOT_COMMAND_QUEUE, ROUTING_KEY_ALL_COMMANDS
+from src.messaging.enums.constants import MessagingQueue, MessagingRoutingKey
 from src.modules.ai import ai_router
 from src.modules.auth import user_router
 from src.modules.character.router import character_router
@@ -31,7 +31,9 @@ async def lifespan(app: FastAPI):
     await bus.start()
     app.state.message_bus = bus
 
-    command_queue = f"{settings.RABBITMQ_QUEUE_PREFIX}.{BOT_COMMAND_QUEUE}"
+    command_queue = (
+        f"{settings.RABBITMQ_QUEUE_PREFIX}.{MessagingQueue.BOT_COMMANDS.value}"
+    )
     command_dispatcher = build_bot_command_dispatcher(
         bus,
         secret=settings.BOT_API_SECRET,
@@ -39,7 +41,7 @@ async def lifespan(app: FastAPI):
     )
     await bus.subscribe(
         command_queue,
-        [ROUTING_KEY_ALL_COMMANDS],
+        [MessagingRoutingKey.ALL_COMMANDS.value],
         command_dispatcher.handle,
     )
     app.state.command_dispatcher = command_dispatcher
