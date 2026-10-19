@@ -1,6 +1,7 @@
 from src.utils.exceptions.ai import (
     AIProviderAuthError,
     AIProviderError,
+    AIProviderModelUnavailableError,
     AIProviderRateLimitError,
     AIProviderTimeoutError,
 )
@@ -15,6 +16,7 @@ from src.utils.exceptions.service_error import ServiceError
 __all__ = [
     "AIProviderAuthError",
     "AIProviderError",
+    "AIProviderModelUnavailableError",
     "AIProviderRateLimitError",
     "AIProviderTimeoutError",
     "MessageAuthenticationError",

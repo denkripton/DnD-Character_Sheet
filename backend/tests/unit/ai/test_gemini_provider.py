@@ -7,6 +7,7 @@ from src.infrastructure.ai.providers.gemini import GeminiProvider
 from src.utils.exceptions import (
     AIProviderAuthError,
     AIProviderError,
+    AIProviderModelUnavailableError,
     AIProviderRateLimitError,
     AIProviderTimeoutError,
 )
@@ -34,6 +35,7 @@ def test_generate_returns_text():
         kwargs = generate.await_args.kwargs
         assert kwargs["model"] == "gemini-2.5-flash"
         assert kwargs["contents"] == "prompt"
+        assert "config" not in kwargs
 
     asyncio.run(flow())
 
@@ -96,6 +98,20 @@ def test_generate_auth_error_raises():
     asyncio.run(flow())
 
 
+def test_generate_model_not_found_is_distinguished():
+    error = genai_errors.ClientError(
+        code=404, response_json={"error": {"message": "model not found"}}
+    )
+    provider, _ = _provider(side_effect=error)
+
+    async def flow():
+        with pytest.raises(AIProviderModelUnavailableError) as exc_info:
+            await provider.generate("prompt", model="gemini-2.5-pro")
+        assert str(exc_info.value) == "Model gemini-2.5-pro is unavailable from gemini"
+
+    asyncio.run(flow())
+
+
 def test_generate_client_error_raises_provider_error():
     error = genai_errors.ClientError(code=400, response_json={"error": {"message": "bad request"}})
     provider, _ = _provider(side_effect=error)
@@ -103,7 +119,8 @@ def test_generate_client_error_raises_provider_error():
     async def flow():
         with pytest.raises(AIProviderError) as exc_info:
             await provider.generate("prompt", model="gemini-2.5-flash")
-        assert "request failed" in exc_info.value.message
+        assert exc_info.value.message == "gemini request failed"
+        assert "bad request" not in exc_info.value.message
 
     asyncio.run(flow())
 

@@ -34,13 +34,17 @@ from src.modules.character.models import (
 )
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.commands.dispatcher_factory import (
+    AI_AUTH_ERROR_TEXT,
+    AI_MODEL_UNAVAILABLE_ERROR_TEXT,
     AI_RATE_LIMIT_ERROR_TEXT,
     AI_TIMEOUT_ERROR_TEXT,
     AI_UNAVAILABLE_ERROR_TEXT,
     build_bot_command_dispatcher,
 )
 from src.utils.exceptions import (
+    AIProviderAuthError,
     AIProviderError,
+    AIProviderModelUnavailableError,
     AIProviderRateLimitError,
     AIProviderTimeoutError,
     MessageAuthenticationError,
@@ -644,6 +648,32 @@ def test_backstory_generate_ai_provider_error_returns_error():
     )
 
     assert event.payload == {"ok": False, "error": AI_UNAVAILABLE_ERROR_TEXT}
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (
+            AIProviderModelUnavailableError("unsafe upstream detail", provider="gemini"),
+            AI_MODEL_UNAVAILABLE_ERROR_TEXT,
+        ),
+        (
+            AIProviderAuthError("unsafe upstream detail", provider="gemini"),
+            AI_AUTH_ERROR_TEXT,
+        ),
+    ],
+)
+def test_backstory_generate_distinguishes_model_and_auth_failures(error, expected):
+    env = _environment(ai=FakeAI(error=error))
+    character_id = _create_character(env)
+
+    event, _ = _dispatch(
+        env,
+        MessageType.CHARACTER_GENERATE_BACKSTORY,
+        {"character_id": character_id},
+    )
+
+    assert event.payload == {"ok": False, "error": expected}
 
 
 def test_backstory_generate_empty_ai_response_returns_error():

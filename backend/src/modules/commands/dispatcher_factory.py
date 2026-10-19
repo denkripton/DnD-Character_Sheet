@@ -20,6 +20,8 @@ from src.modules.character.draft import (
 )
 from src.utils.exceptions import (
     AIProviderError,
+    AIProviderAuthError,
+    AIProviderModelUnavailableError,
     AIProviderRateLimitError,
     AIProviderTimeoutError,
     RateLimitExceeded,
@@ -34,6 +36,8 @@ AI_RATE_LIMIT_ERROR_TEXT = (
     "The AI provider rate limit was reached. Please try again later."
 )
 AI_UNAVAILABLE_ERROR_TEXT = "The AI provider is unavailable right now."
+AI_MODEL_UNAVAILABLE_ERROR_TEXT = "The selected AI model is unavailable. Choose another model."
+AI_AUTH_ERROR_TEXT = "AI provider authentication is not available. Please contact support."
 
 
 def build_bot_command_dispatcher(
@@ -244,6 +248,10 @@ async def _backstory_call(
         return {"ok": False, "error": str(exc)}
     except ServiceError as exc:
         return {"ok": False, "error": str(exc)}
+    except AIProviderModelUnavailableError:
+        return {"ok": False, "error": AI_MODEL_UNAVAILABLE_ERROR_TEXT}
+    except AIProviderAuthError:
+        return {"ok": False, "error": AI_AUTH_ERROR_TEXT}
     except AIProviderTimeoutError:
         return {"ok": False, "error": AI_TIMEOUT_ERROR_TEXT}
     except AIProviderRateLimitError:
