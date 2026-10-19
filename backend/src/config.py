@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from src.utils.logging import configure_logging
@@ -12,6 +13,9 @@ class Settings(BaseSettings):
 
     BOT_API_SECRET: str
     BOT_MESSAGE_MAX_AGE_SECONDS: int = 300
+    BOT_TOKEN: str | None = None
+    TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: int = 300
+    MINI_APP_ALLOWED_ORIGINS: list[str] = Field(default_factory=list)
 
     GEMINI_API_KEY: str
     DEFAULT_AI_MODEL: str

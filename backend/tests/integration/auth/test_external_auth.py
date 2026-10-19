@@ -3,8 +3,10 @@ import uuid
 
 import pytest
 from sqlalchemy.exc import IntegrityError
+
 from src.modules.auth.external_service import ExternalAuthService
 from src.modules.auth.models import ExternalIdentity, User
+from src.modules.auth.schemas.telegram_mini_app import TelegramMiniAppAuthRequest
 from src.modules.auth.utils import JWT
 from src.utils.exceptions import ServiceError
 from tests.utils import FakeRepo, FakeUnitOfWork
@@ -66,6 +68,30 @@ def test_auth_creates_user_and_identity_on_first_login():
         assert user.id == identity.user_id
         assert identity.provider == "telegram"
         assert identity.provider_user_id == "7"
+
+    asyncio.run(flow())
+
+
+def test_mini_app_request_uses_verified_telegram_id(monkeypatch):
+    user_repo = FakeRepo(model=User)
+    identity_repo = FakeIdentityRepo(model=ExternalIdentity)
+    service = _service(user_repo, identity_repo)
+    monkeypatch.setattr("src.modules.auth.external_service.settings.BOT_TOKEN", "token")
+    monkeypatch.setattr(
+        "src.modules.auth.external_service.validate_telegram_init_data",
+        lambda init_data, bot_token, max_age: {"id": 73},
+    )
+
+    async def flow():
+        result = await service.authenticate_request(
+            data=TelegramMiniAppAuthRequest(init_data="signed-init-data"),
+            bot_secret=None,
+        )
+
+        assert result["access"]
+        assert "refresh" not in result
+        assert identity_repo.rows[0].provider == "telegram"
+        assert identity_repo.rows[0].provider_user_id == "73"
 
     asyncio.run(flow())
 

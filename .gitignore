@@ -136,6 +136,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.local
 .envrc
 .venv
 env/
@@ -190,6 +191,9 @@ cython_debug/
 
 # Ruff stuff:
 .ruff_cache/
+mini-app/node_modules/
+mini-app/config/node_modules/
+mini-app/config/tsconfig.tsbuildinfo
 
 # PyPI configuration file
 .pypirc

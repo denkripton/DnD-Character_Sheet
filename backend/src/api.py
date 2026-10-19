@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import settings
 from src.dependencies import get_message_bus
@@ -82,6 +83,13 @@ class API(Application):
             contact=self.contact,
             lifespan=lifespan,
         )
+        if settings.MINI_APP_ALLOWED_ORIGINS:
+            self.app.add_middleware(
+                CORSMiddleware,
+                allow_origins=settings.MINI_APP_ALLOWED_ORIGINS,
+                allow_methods=["GET", "POST", "PATCH", "DELETE"],
+                allow_headers=["Authorization", "Content-Type"],
+            )
         self.app.add_middleware(RequestLoggingMiddleware)
         for router in self.routers:
             self.app.include_router(router=router)
