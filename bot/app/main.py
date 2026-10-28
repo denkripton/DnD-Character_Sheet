@@ -9,6 +9,7 @@ from app.config import load_config
 from app.dependencies import build_rabbitmq_client
 from app.infrastructure.logging import configure_logging
 from app.modules.character import CharacterCreationService
+from app.modules.start.mini_app import configure_bot_menu
 
 
 async def close_storage(storage: BaseStorage) -> None:
@@ -31,6 +32,7 @@ async def main() -> None:
     dispatcher["rabbit"] = rabbit
     dispatcher["creation_service"] = CharacterCreationService(rabbit)
 
+    await configure_bot_menu(bot, config)
     await rabbit.start()
     structlog.get_logger("app.main").info("bot_started")
     try:

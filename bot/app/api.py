@@ -11,6 +11,7 @@ from app.modules.auth import BotAuthService
 from app.modules.backstory.router import build_backstory_router
 from app.modules.character import build_character_creation_router
 from app.modules.start.router import build_start_router
+from app.modules.start.mini_app import build_mini_app_router
 from app.modules.start.service import StartService
 
 
@@ -28,6 +29,7 @@ def create_dispatcher(
     dispatcher = Dispatcher(storage=storage or create_fsm_storage(config))
     dispatcher.update.outer_middleware(LoggingMiddleware())
     dispatcher.include_router(build_start_router())
+    dispatcher.include_router(build_mini_app_router())
     dispatcher.include_router(build_backstory_router())
     dispatcher.include_router(build_character_creation_router())
     dispatcher["config"] = config

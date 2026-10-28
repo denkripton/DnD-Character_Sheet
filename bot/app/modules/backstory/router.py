@@ -156,6 +156,19 @@ async def handle_hub_hint(message: Message, state) -> None:
     await message.answer(BACKSTORY_HUB_HINT_TEXT)
 
 
+async def handle_backstory_command(message: Message, state) -> None:
+    if await _context(state) is None:
+        await message.answer(BACKSTORY_NOT_STARTED_TEXT)
+        return
+    if await state.get_state() != BackstoryStates.character_saved.state:
+        await message.answer(BACKSTORY_HUB_HINT_TEXT)
+        return
+    await state.set_state(BackstoryStates.prompt)
+    await message.answer(
+        BACKSTORY_START_TEXT, reply_markup=backstory_prompt_keyboard()
+    )
+
+
 async def handle_review_hint(message: Message, state) -> None:
     await message.answer(BACKSTORY_REVIEW_HINT_TEXT)
 
@@ -462,6 +475,7 @@ def build_backstory_router() -> Router:
         Command("cancel"),
         StateFilter(*BACKSTORY_STATES),
     )
+    router.message.register(handle_backstory_command, Command("backstory"))
     router.message.register(
         handle_prompt_input, BackstoryStates.prompt
     )

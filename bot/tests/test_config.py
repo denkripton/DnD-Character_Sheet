@@ -1,4 +1,4 @@
-from app.config import load_config
+from app.config import BotConfig, load_config
 
 
 def test_defaults(monkeypatch):
@@ -39,3 +39,23 @@ def test_env_overrides(monkeypatch):
     assert config.RABBITMQ_PREFETCH_COUNT == 25
     assert config.RABBITMQ_MAX_RETRIES == 7
     assert config.REDIS_URL == "redis://localhost:9999/3"
+
+
+def test_mini_app_url_is_optional_and_allows_development_http(monkeypatch):
+    monkeypatch.setenv("BOT_TOKEN", "12345:test-token")
+    monkeypatch.setenv("MINI_APP_URL", "http://localhost:5173")
+    config = load_config()
+    assert config.MINI_APP_URL == "http://localhost:5173"
+
+
+def test_mini_app_url_requires_https_in_production(monkeypatch):
+    import pytest
+    from pydantic import ValidationError
+
+    monkeypatch.setenv("BOT_TOKEN", "12345:test-token")
+    with pytest.raises(ValidationError):
+        BotConfig(
+            BOT_TOKEN="12345:test-token",
+            ENVIRONMENT="production",
+            MINI_APP_URL="http://app.example.com",
+        )

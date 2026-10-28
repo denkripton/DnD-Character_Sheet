@@ -1,12 +1,14 @@
 from aiogram import Router
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
 
+from app.config import BotConfig
 from app.infrastructure.http.exceptions import BackendAuthError
 from app.modules.auth import BotAuthService
 from app.modules.start.schemas.user import UserIdentity
 from app.modules.start.service import StartService
+from app.modules.start.mini_app import build_mini_app_url
 from app.presentation.messages import AUTH_UNAVAILABLE_TEXT
 
 
@@ -15,6 +17,7 @@ async def handle_start(
     start_service: StartService,
     auth_service: BotAuthService,
     state: FSMContext,
+    config: BotConfig | None = None,
 ) -> None:
     user = UserIdentity.from_aiogram(message.from_user)
 
@@ -26,7 +29,19 @@ async def handle_start(
             return
         await state.update_data(auth=auth_context.model_dump())
 
-    await message.answer(start_service.create_greeting(user))
+    url = build_mini_app_url(config) if config else None
+    keyboard = None
+    if url and message.chat.type == "private":
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="Open Mini App", web_app=WebAppInfo(url=url)
+                    )
+                ]
+            ]
+        )
+    await message.answer(start_service.create_greeting(user), reply_markup=keyboard)
 
 
 def build_start_router() -> Router:

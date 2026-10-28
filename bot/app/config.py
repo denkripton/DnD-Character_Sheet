@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +19,7 @@ class BotConfig(BaseSettings):
     ENVIRONMENT: str = "development"
     SERVICE_NAME: str = "bot"
     LOG_JSON: bool = True
+    MINI_APP_URL: str | None = None
 
     RABBITMQ_URL: str = "amqp://backend:backend@rabbitmq:5672/"
     RABBITMQ_EXCHANGE: str = "dnd.events"
@@ -32,6 +35,26 @@ class BotConfig(BaseSettings):
         env_file=Path(__file__).resolve().parents[2] / ".env",
         extra="ignore",
     )
+
+    @field_validator("MINI_APP_URL")
+    @classmethod
+    def validate_mini_app_url(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        parsed = urlparse(value)
+        if parsed.scheme not in {"https", "http"} or not parsed.netloc:
+            raise ValueError("MINI_APP_URL must be an absolute HTTP(S) URL")
+        return value
+
+    @model_validator(mode="after")
+    def require_https_mini_app_url_in_production(self):
+        if (
+            self.MINI_APP_URL
+            and self.ENVIRONMENT.lower() == "production"
+            and not self.MINI_APP_URL.lower().startswith("https://")
+        ):
+            raise ValueError("MINI_APP_URL must use HTTPS in production")
+        return self
 
 
 def load_config() -> BotConfig:

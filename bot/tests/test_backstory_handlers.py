@@ -708,6 +708,7 @@ def test_backstory_router_registers_expected_handlers():
     assert sorted(message_names) == sorted(
         [
             "handle_close",
+            "handle_backstory_command",
             "handle_prompt_input",
             "handle_edit_input",
             "handle_review_hint",
