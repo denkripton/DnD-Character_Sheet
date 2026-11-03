@@ -1,4 +1,32 @@
 services:
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+      args:
+        VITE_API_BASE_URL: https://${API_DOMAIN:-api.example.com}
+    restart: unless-stopped
+    environment:
+      MINI_APP_DOMAIN: ${MINI_APP_DOMAIN:-mini-app.example.com}
+      API_DOMAIN: ${API_DOMAIN:-api.example.com}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - nginx_certs:/etc/letsencrypt
+      - acme_webroot:/var/www/certbot
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - internal
+
   backend:
     build:
       context: .
@@ -7,6 +35,7 @@ services:
       - .env
     environment:
       ENVIRONMENT: production
+      MINI_APP_ALLOWED_ORIGINS: '["https://${MINI_APP_DOMAIN:-mini-app.example.com}"]'
       DB_URL: postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
     depends_on:
       postgres:
@@ -90,8 +119,10 @@ services:
 networks:
   internal:
     driver: bridge
-    internal: true
+    internal: false
 
 volumes:
   pgdata:
   rabbitmqdata:
+  nginx_certs:
+  acme_webroot:

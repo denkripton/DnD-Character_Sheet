@@ -1,0 +1,36 @@
+server {
+    listen 80;
+    server_name ${MINI_APP_DOMAIN};
+
+    client_max_body_size 10m;
+    client_body_timeout 30s;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${MINI_APP_DOMAIN};
+
+    ssl_certificate /etc/letsencrypt/live/dnd-character-sheet/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/dnd-character-sheet/privkey.pem;
+    include /etc/nginx/snippets/ssl.conf;
+
+    client_max_body_size 10m;
+    client_body_timeout 30s;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

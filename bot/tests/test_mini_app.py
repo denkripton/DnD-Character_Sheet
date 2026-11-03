@@ -39,6 +39,19 @@ def test_menu_configuration_without_url_skips_web_app_menu_button():
     )
 
 
+def test_http_development_url_keeps_telegram_commands_menu():
+    bot = AsyncMock()
+    config = BotConfig(
+        BOT_TOKEN="12345:test-token", MINI_APP_URL="http://localhost:5173"
+    )
+
+    asyncio.run(configure_bot_menu(bot, config))
+
+    assert isinstance(
+        bot.set_chat_menu_button.await_args.kwargs["menu_button"], MenuButtonCommands
+    )
+
+
 def test_app_command_sends_private_web_app_button():
     message = AsyncMock()
     message.chat = SimpleNamespace(type=ChatType.PRIVATE)
@@ -69,3 +82,17 @@ def test_app_command_handles_missing_url():
     message = AsyncMock()
     asyncio.run(handle_app(message, BotConfig(BOT_TOKEN="12345:test-token")))
     message.answer.assert_awaited_once_with("The Mini App is not configured yet.")
+
+
+def test_http_development_url_is_not_sent_as_web_app_button():
+    message = AsyncMock()
+    message.chat = SimpleNamespace(type=ChatType.PRIVATE)
+    config = BotConfig(
+        BOT_TOKEN="12345:test-token", MINI_APP_URL="http://localhost:5173"
+    )
+
+    asyncio.run(handle_app(message, config))
+
+    message.answer.assert_awaited_once_with(
+        "The Mini App is available locally at http://localhost:5173. Telegram Web App buttons require HTTPS."
+    )

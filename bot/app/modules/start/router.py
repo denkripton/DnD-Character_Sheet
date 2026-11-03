@@ -31,7 +31,7 @@ async def handle_start(
 
     url = build_mini_app_url(config) if config else None
     keyboard = None
-    if url and message.chat.type == "private":
+    if url and url.startswith("https://") and message.chat.type == "private":
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
