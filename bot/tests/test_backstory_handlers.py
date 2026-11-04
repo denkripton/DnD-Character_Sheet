@@ -548,6 +548,8 @@ def test_cancel_from_review_discards_and_returns_to_hub():
     assert _callback_data(_keyboard(callback.message)) == _callback_data(
         backstory_hub_keyboard()
     )
+    assert "backstory" not in state.data
+    assert state.data["character_id"] == "char-1"
 
 
 def test_cancel_from_prompt_returns_to_hub():
@@ -691,7 +693,8 @@ def test_full_flow_generate_accept_then_close():
     assert service.saved_backstories == [
         ("char-1", "Story version 1.")
     ]
-    assert state.data["backstory_prompt"] == "orphan raised by wolves"
+    assert "backstory_prompt" not in state.data
+    assert "backstory" not in state.data
 
     close = _callback("bs:close")
     asyncio.run(handle_backstory_callback(close, state, service))

@@ -258,7 +258,22 @@ async def handle_create(
         await message.answer(CHARACTER_AUTH_REQUIRED_TEXT)
         return
     if data.get("draft_id"):
-        await message.answer(CHARACTER_IN_PROGRESS_TEXT)
+        current = await state.get_state()
+        if current == CharacterCreationStates.generation_method.state:
+            text, keyboard = (
+                CHARACTER_GENERATION_METHOD_TEXT,
+                generation_method_keyboard(),
+            )
+        elif current == CharacterCreationStates.generation_result.state:
+            text, keyboard = _generation_result_text(data), generation_result_keyboard()
+        elif position := position_for_state(current):
+            text, keyboard = await _position_reply(state, position)
+        else:
+            await state.set_state(CharacterCreationStates.generation_mode)
+            text, keyboard = CHARACTER_GENERATION_MODE_TEXT, generation_mode_keyboard()
+        await message.answer(
+            f"{CHARACTER_IN_PROGRESS_TEXT}\n\n{text}", reply_markup=keyboard
+        )
         return
     try:
         draft = await creation_service.start(auth)
@@ -268,6 +283,8 @@ async def handle_create(
     except BackendUnavailableError:
         await message.answer(CHARACTER_UNAVAILABLE_TEXT)
         return
+    await state.clear()
+    await state.update_data(auth=auth)
     await state.set_state(CharacterCreationStates.generation_mode)
     await state.update_data(
         draft_id=draft.get("id"),

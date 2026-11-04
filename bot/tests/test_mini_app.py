@@ -80,7 +80,9 @@ def test_characters_command_opens_characters_route():
 
 def test_app_command_handles_missing_url():
     message = AsyncMock()
-    asyncio.run(handle_app(message, BotConfig(BOT_TOKEN="12345:test-token")))
+    asyncio.run(
+        handle_app(message, BotConfig(BOT_TOKEN="12345:test-token", MINI_APP_URL=None))
+    )
     message.answer.assert_awaited_once_with("The Mini App is not configured yet.")
 
 

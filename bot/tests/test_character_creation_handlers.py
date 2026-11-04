@@ -486,7 +486,38 @@ def test_repeated_create_command_does_not_create_second_draft():
 
     assert service.starts == 1
     assert state.state == CharacterCreationStates.name.state
-    assert _last_answer(message) == CHARACTER_IN_PROGRESS_TEXT
+    assert _last_answer(message).startswith(CHARACTER_IN_PROGRESS_TEXT)
+    assert "Step 1/5" in _last_answer(message)
+    assert message.answer.call_args.kwargs["reply_markup"] is not None
+
+
+def test_create_restores_draft_when_step_state_was_lost():
+    service = FakeCreationService()
+    state = FakeState(
+        data={"auth": dict(AUTH), "draft_id": "draft-1", "draft_data": {"name": "Aria"}}
+    )
+
+    message = _message("/create")
+    asyncio.run(handle_create(message, state, service))
+
+    assert state.state == CharacterCreationStates.generation_mode.state
+    assert state.data["draft_data"] == {"name": "Aria"}
+    assert service.starts == 0
+    assert CHARACTER_GENERATION_MODE_TEXT in _last_answer(message)
+    assert message.answer.call_args.kwargs["reply_markup"] is not None
+
+
+def test_create_reopens_stats_step_without_regenerating():
+    service, state = _to_stats_method()
+    asyncio.run(handle_callback(_callback("cc:method:random"), state, service))
+
+    message = _message("/create")
+    asyncio.run(handle_create(message, state, service))
+
+    assert state.state == CharacterCreationStates.stats.state
+    assert "STR 15 (+2)" in _last_answer(message)
+    assert service.stats_generated == [("draft-1", "random")]
+    assert service.starts == 1
 
 
 def test_repeated_stale_preset_button_is_ignored():

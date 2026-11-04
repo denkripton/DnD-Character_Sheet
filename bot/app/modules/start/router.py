@@ -1,14 +1,20 @@
 from aiogram import Router
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+    WebAppInfo,
+)
 
 from app.config import BotConfig
 from app.infrastructure.http.exceptions import BackendAuthError
+from app.middlewares.session import restore_session
 from app.modules.auth import BotAuthService
+from app.modules.start.mini_app import build_mini_app_url
 from app.modules.start.schemas.user import UserIdentity
 from app.modules.start.service import StartService
-from app.modules.start.mini_app import build_mini_app_url
 from app.presentation.messages import AUTH_UNAVAILABLE_TEXT
 
 
@@ -23,11 +29,10 @@ async def handle_start(
 
     if user.id > 0:
         try:
-            auth_context = await auth_service.authenticate(user.id)
+            await restore_session(state, auth_service, user.id, refresh=True)
         except BackendAuthError:
             await message.answer(AUTH_UNAVAILABLE_TEXT)
             return
-        await state.update_data(auth=auth_context.model_dump())
 
     url = build_mini_app_url(config) if config else None
     keyboard = None

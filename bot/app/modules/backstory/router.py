@@ -59,6 +59,18 @@ BACKSTORY_STATES = (
 )
 
 
+async def _reset_to_hub(state) -> None:
+    data = await state.get_data()
+    retained = {
+        key: data[key]
+        for key in ("auth", "character_id", "character", "ai_provider", "ai_model")
+        if key in data
+    }
+    await state.clear()
+    await state.update_data(**retained)
+    await state.set_state(BackstoryStates.character_saved)
+
+
 async def _context(state) -> tuple[dict, str] | None:
     data = await state.get_data()
     auth = data.get("auth")
@@ -76,7 +88,7 @@ def _review_text(backstory: str) -> str:
 
 
 async def _show_hub(target, state) -> None:
-    await state.set_state(BackstoryStates.character_saved)
+    await _reset_to_hub(state)
     await target.answer(
         CHARACTER_SAVED_TEXT, reply_markup=backstory_hub_keyboard()
     )
@@ -250,11 +262,11 @@ async def _accept(
         await callback.answer()
         await callback.message.answer(CHARACTER_UNAVAILABLE_TEXT)
         return
+    await _reset_to_hub(state)
     await callback.answer()
     await callback.message.answer(
         BACKSTORY_SAVED_TEXT, reply_markup=backstory_hub_keyboard()
     )
-    await state.set_state(BackstoryStates.character_saved)
 
 
 async def _start_editing(callback: CallbackQuery, state) -> None:
@@ -286,7 +298,7 @@ async def _cancel(callback: CallbackQuery, state) -> None:
         return
     await callback.answer()
     if current == BackstoryStates.review.state:
-        await state.set_state(BackstoryStates.character_saved)
+        await _reset_to_hub(state)
         await callback.message.answer(
             BACKSTORY_DISCARDED_TEXT, reply_markup=backstory_hub_keyboard()
         )

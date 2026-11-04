@@ -37,7 +37,9 @@ def _auth_service(**overrides):
 
 
 def _state():
-    return AsyncMock()
+    state = AsyncMock()
+    state.get_data.return_value = {}
+    return state
 
 
 def test_start_replies_with_greeting_after_auth():
