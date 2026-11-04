@@ -19,7 +19,7 @@ class CharacterDraft(Base):
         UUID(as_uuid=True), ForeignKey("characters.id"), nullable=True
     )
     saved_character_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True
+        UUID(as_uuid=True), ForeignKey("characters.id"), nullable=True
     )
 
     created_at: Mapped[DateTime] = mapped_column(

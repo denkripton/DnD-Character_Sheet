@@ -7,6 +7,7 @@ from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.repositories import (
     BackstoryRepository,
     CharacterRepository,
+    CharacterDraftRepository,
     CombatRepository,
     FeatureRepository,
     PersonalityRepository,
@@ -17,6 +18,7 @@ from src.modules.character.repositories import (
 )
 
 character_repository = RepoFactory(repo=CharacterRepository)
+draft_repository = RepoFactory(repo=CharacterDraftRepository)
 stats_repository = RepoFactory(repo=StatsRepository)
 combat_repository = RepoFactory(repo=CombatRepository)
 saving_throws_repository = RepoFactory(repo=SavingThrowsRepository)

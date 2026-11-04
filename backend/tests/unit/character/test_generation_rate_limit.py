@@ -7,7 +7,8 @@ from src.utils.exceptions import RateLimitExceeded
 from src.modules.character.base.enums.generation_limits import GenerationLimits
 from src.modules.character.base.schemas import CharacterCreateSchema
 from src.modules.character.base.service import CharacterService
-from src.modules.character.models import Character
+from src.modules.character.draft.service import CharacterDraftService
+from src.modules.character.models import Character, CharacterDraft, Combat, Stat
 from src.utils.exceptions.handlers import rate_limit_exceeded_handler
 from src.utils.interfaces.rate_limiter import RateLimitResult
 from tests.utils import FakeRepo, FakeUnitOfWork, build_guard
@@ -115,11 +116,8 @@ def test_character_creation_raises_when_daily_limit_exceeded(monkeypatch):
     asyncio.run(flow())
 
 
-def test_generate_character_enforces_same_daily_limit(monkeypatch):
-    monkeypatch.setattr(
-        "src.modules.character.base.service.cache", StubCache()
-    )
-    service, stub_limiter, character_repo = build_service(
+def test_generate_draft_enforces_daily_limit():
+    stub_limiter = StubRateLimiter(
         RateLimitResult(
             allowed=False,
             current_usage=5,
@@ -128,10 +126,26 @@ def test_generate_character_enforces_same_daily_limit(monkeypatch):
             retry_after=3600,
         )
     )
+    user_repo = FakeRepo(None)
+    user_repo.rows.append(type("User", (), {"id": "user-42"})())
+    draft_repo = FakeRepo(CharacterDraft)
+    character_repo = FakeRepo(Character)
+    service = CharacterDraftService(
+        draft_repository=draft_repo,
+        character_repository=character_repo,
+        stats_repository=FakeRepo(Stat),
+        user_repository=user_repo,
+        unit_of_work=FakeUnitOfWork(),
+        rate_limiter=stub_limiter,
+        combat_repository=FakeRepo(Combat),
+    )
 
     async def flow():
+        draft = await service.create_draft(user_id="user-42")
         with pytest.raises(RateLimitExceeded):
-            await service.generate_character(user_id="user-42")
+            await service.generate_character(
+                user_id="user-42", draft_id=draft.id, method="random"
+            )
         assert len(character_repo.rows) == 0
         assert stub_limiter.calls == [
             (

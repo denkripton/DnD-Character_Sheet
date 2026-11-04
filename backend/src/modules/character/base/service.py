@@ -18,7 +18,6 @@ from src.modules.character.utils.ownership import (
     CharacterOwnershipGuard,
     coerce_identifier,
 )
-from src.modules.character.utils.random_character import generate_random_character
 from src.utils.exceptions import RateLimitExceeded, ServiceError
 from src.utils.interfaces.rate_limiter import RateLimiter
 
@@ -74,12 +73,6 @@ class CharacterService:
         await cache.delete_pattern(f"characters:list:{user_id}*")
 
         return CharacterReadSchema.model_validate(character)
-
-    async def generate_character(self, user_id):
-        payload = generate_random_character()
-        return await self.character_creation(
-            user_id, CharacterCreateSchema(**payload)
-        )
 
     async def update_character(self, user_id, character_id, data: CharacterUpdateSchema):
         character = await self.ownership.get_owned(user_id, character_id)

@@ -1,6 +1,6 @@
-from src.modules.character.draft.dependencies import character_draft_service_scope
 from src.modules.character.draft.schemas import CharacterDraftReadSchema
 from src.modules.character.draft.service import CharacterDraftService
+from src.modules.character.draft.dependencies import character_draft_service_scope
 
 __all__ = [
     "CharacterDraftReadSchema",

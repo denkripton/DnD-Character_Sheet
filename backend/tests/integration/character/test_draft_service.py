@@ -696,6 +696,20 @@ def test_regeneration_replaces_working_draft_without_saving_character():
     asyncio.run(flow())
 
 
+def test_generated_character_is_not_persisted_until_save():
+    service, draft_repo, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        await service.generate_character("user-1", draft.id, "random")
+
+        assert len(draft_repo.rows) == 1
+        assert service.character_repo.rows == []
+        assert draft_repo.rows[0].saved_character_id is None
+
+    asyncio.run(flow())
+
+
 def test_save_character_requires_required_fields():
     service, draft_repo, _ = _service()
 
