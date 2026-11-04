@@ -26,6 +26,7 @@ from app.modules.character.router import (
     handle_callback,
     handle_cancel,
     handle_create,
+    handle_edit_character,
     handle_generation_hint,
     handle_stats_input,
     handle_stats_method_input,
@@ -687,7 +688,7 @@ def test_name_step_keyboard_has_no_preset_options():
 def test_router_registers_expected_handlers():
     router = build_character_creation_router()
     assert router.name == "character_creation"
-    assert len(router.message.handlers) == 8
+    assert len(router.message.handlers) == 9
     assert len(router.callback_query.handlers) == 1
 
 
@@ -1109,7 +1110,7 @@ def test_full_generation_success_displays_character():
     assert service.characters_generated == [("draft-1", "standard")]
     assert state.state == CharacterCreationStates.generation_result.state
     text = _last_answer(callback.message)
-    assert "Your character has been generated:" in text
+    assert "Generated character draft (not saved):" in text
     assert "Name: Hero-1" in text
     assert "Race: Elf" in text
     assert "Class: Wizard" in text
@@ -1121,6 +1122,7 @@ def test_full_generation_success_displays_character():
     ]
     assert CALLBACK_FULL_REGEN in callback_data
     assert CALLBACK_FULL_EDIT in callback_data
+    assert "cc:save" in callback_data
     assert CALLBACK_CANCEL in callback_data
 
 
@@ -1215,7 +1217,7 @@ def test_back_from_edit_returns_to_generation_result():
     asyncio.run(handle_back(message, state))
 
     assert state.state == CharacterCreationStates.generation_result.state
-    assert "Your character has been generated:" in _last_answer(message)
+    assert "Generated character draft (not saved):" in _last_answer(message)
 
 
 def test_step_by_step_callback_starts_wizard():
@@ -1312,6 +1314,62 @@ def test_save_character_button_transitions_to_backstory_hub():
     ]
     assert "bs:start" in callback_data
     assert "bs:close" in callback_data
+
+
+def test_generated_draft_can_be_saved_without_editing():
+    service, state = _to_generation_method()
+    asyncio.run(handle_callback(_callback(f"{CALLBACK_FULL_METHOD}:standard"), state, service))
+
+    callback = _callback("cc:save")
+    asyncio.run(handle_callback(callback, state, service))
+
+    assert service.saved == ["draft-1"]
+    assert state.state == BackstoryStates.character_saved.state
+    assert "draft_id" not in state.data
+    assert state.data["character_id"] == "char-1"
+
+
+def test_edit_saved_character_starts_working_draft_and_saves():
+    service = FakeCreationService()
+    service.start_edit = AsyncMock(return_value={
+        "id": "edit-draft-1",
+        "target_character_id": "char-1",
+        "data": {"name": "Aria", "kind": "Elf", "spec_class": "Wizard"},
+    })
+    state = FakeState(data={"auth": dict(AUTH), "character_id": "char-1"})
+    message = _message("/edit_character char-1")
+
+    asyncio.run(handle_edit_character(message, state, service))
+
+    service.start_edit.assert_awaited_once_with(AUTH, "char-1")
+    assert state.state == CharacterCreationStates.summary.state
+    assert state.data["draft_id"] == "edit-draft-1"
+    assert "Proposed changes (not saved)" in _last_answer(message)
+    asyncio.run(handle_callback(_callback("cc:save"), state, service))
+    assert service.saved == ["edit-draft-1"]
+
+
+def test_edit_saved_character_cancel_discards_working_draft():
+    service = FakeCreationService()
+    service.start_edit = AsyncMock(return_value={
+        "id": "edit-draft-1",
+        "target_character_id": "char-1",
+        "data": {"name": "Aria", "kind": "Elf", "spec_class": "Wizard"},
+    })
+    state = _state_with_auth()
+    asyncio.run(handle_edit_character(_message("/edit_character char-1"), state, service))
+    asyncio.run(handle_cancel(_message("/cancel"), state, service))
+    assert service.cancelled == ["edit-draft-1"]
+    assert state.state is None
+
+
+def test_edit_saved_character_rejects_missing_identifier():
+    service = FakeCreationService()
+    service.start_edit = AsyncMock()
+    message = _message("/edit_character")
+    asyncio.run(handle_edit_character(message, _state_with_auth(), service))
+    service.start_edit.assert_not_awaited()
+    assert "<character ID>" in _last_answer(message)
 
 
 def test_save_character_rejected_outside_summary_state():

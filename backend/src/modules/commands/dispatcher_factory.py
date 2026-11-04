@@ -10,6 +10,7 @@ from src.messaging.interfaces import MessagePublisher
 from src.messaging.messages import MessageEnvelope
 from src.messaging.security import require_identity_headers, verify_command
 from src.modules.ai.dependencies import get_ai_registry
+from src.modules.ai.enums import AIErrorMessage
 from src.modules.character.backstory import character_backstory_service_scope
 from src.modules.character.backstory.schemas import BackstoryCreateSchema
 from src.modules.character.backstory.service import BackstoryService
@@ -19,8 +20,8 @@ from src.modules.character.draft import (
     character_draft_service_scope,
 )
 from src.utils.exceptions import (
-    AIProviderError,
     AIProviderAuthError,
+    AIProviderError,
     AIProviderModelUnavailableError,
     AIProviderRateLimitError,
     AIProviderTimeoutError,
@@ -30,15 +31,6 @@ from src.utils.exceptions import (
 
 DraftServiceScope = Callable[[], AbstractAsyncContextManager[CharacterDraftService]]
 BackstoryServiceScope = Callable[[], AbstractAsyncContextManager[BackstoryService]]
-
-AI_TIMEOUT_ERROR_TEXT = "The AI provider timed out. Please try again."
-AI_RATE_LIMIT_ERROR_TEXT = (
-    "The AI provider rate limit was reached. Please try again later."
-)
-AI_UNAVAILABLE_ERROR_TEXT = "The AI provider is unavailable right now."
-AI_MODEL_UNAVAILABLE_ERROR_TEXT = "The selected AI model is unavailable. Choose another model."
-AI_AUTH_ERROR_TEXT = "AI provider authentication is not available. Please contact support."
-
 
 def build_bot_command_dispatcher(
     producer: MessagePublisher,
@@ -64,6 +56,14 @@ def build_bot_command_dispatcher(
         MessageType.CHARACTER_CREATE,
         _require_authenticated(
             _handle_draft_create(producer, draft_service_scope),
+            secret,
+            max_age_seconds,
+        ),
+    )
+    dispatcher.register(
+        MessageType.CHARACTER_UPDATE,
+        _require_authenticated(
+            _handle_draft_edit(producer, draft_service_scope),
             secret,
             max_age_seconds,
         ),
@@ -249,15 +249,15 @@ async def _backstory_call(
     except ServiceError as exc:
         return {"ok": False, "error": str(exc)}
     except AIProviderModelUnavailableError:
-        return {"ok": False, "error": AI_MODEL_UNAVAILABLE_ERROR_TEXT}
+        return {"ok": False, "error": AIErrorMessage.MODEL_UNAVAILABLE.value}
     except AIProviderAuthError:
-        return {"ok": False, "error": AI_AUTH_ERROR_TEXT}
+        return {"ok": False, "error": AIErrorMessage.AUTH.value}
     except AIProviderTimeoutError:
-        return {"ok": False, "error": AI_TIMEOUT_ERROR_TEXT}
+        return {"ok": False, "error": AIErrorMessage.TIMEOUT.value}
     except AIProviderRateLimitError:
-        return {"ok": False, "error": AI_RATE_LIMIT_ERROR_TEXT}
+        return {"ok": False, "error": AIErrorMessage.RATE_LIMIT.value}
     except AIProviderError:
-        return {"ok": False, "error": AI_UNAVAILABLE_ERROR_TEXT}
+        return {"ok": False, "error": AIErrorMessage.UNAVAILABLE.value}
     except SQLAlchemyError:
         return {
             "ok": False,
@@ -298,6 +298,25 @@ def _handle_draft_create(producer: MessagePublisher, draft_service_scope):
         payload = await _draft_call(draft_service_scope, call)
         await _publish_response(
             producer, MessageType.CHARACTER_CREATED, envelope, payload
+        )
+
+    return handle
+
+
+def _handle_draft_edit(producer: MessagePublisher, draft_service_scope):
+    async def handle(envelope: MessageEnvelope) -> None:
+        user_id = _identity(envelope)[AUTH_USER_ID_HEADER]
+        payload = envelope.payload if isinstance(envelope.payload, dict) else {}
+        character_id = payload.get("character_id")
+
+        async def call(service):
+            if not character_id:
+                raise ServiceError(msg="Invalid character edit request.", code=422)
+            return await service.create_edit_draft(user_id, character_id)
+
+        result = await _draft_call(draft_service_scope, call)
+        await _publish_response(
+            producer, MessageType.CHARACTER_UPDATED, envelope, result
         )
 
     return handle

@@ -53,7 +53,7 @@ def test_dispatcher_rejects_unknown_message_type():
 
 def test_bot_command_dispatcher_proof_of_concept_flows_command_to_event():
     from src.modules.character.draft import CharacterDraftService
-    from src.modules.character.models import Character, CharacterDraft, Stat
+    from src.modules.character.models import Character, CharacterDraft, Combat, Stat
 
     producer = AsyncMock()
     user_repo = FakeRepo(model=type("User", (), {}))
@@ -71,6 +71,7 @@ def test_bot_command_dispatcher_proof_of_concept_flows_command_to_event():
             user_repository=user_repo,
             unit_of_work=FakeUnitOfWork(),
             rate_limiter=StubRateLimiter(allowed=True),
+            combat_repository=FakeRepo(model=Combat),
         )
 
     dispatcher = build_bot_command_dispatcher(producer, draft_service_scope=scope)

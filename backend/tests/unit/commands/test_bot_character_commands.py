@@ -15,7 +15,7 @@ from src.messaging.enums.constants import (
 )
 from src.modules.character.base.enums.generation_limits import GenerationLimits
 from src.modules.character.draft import CharacterDraftService
-from src.modules.character.models import Character, CharacterDraft, Stat
+from src.modules.character.models import Character, CharacterDraft, Combat, Stat
 from src.modules.character.utils.random_character import KINDS, NAMES, SPEC_CLASSES
 from src.modules.commands.dispatcher_factory import build_bot_command_dispatcher
 from src.utils.exceptions import MessageAuthenticationError
@@ -65,12 +65,12 @@ class FlakyUnitOfWork(FakeUnitOfWork):
         await super().commit()
 
 
-def _environment(rate_limiter=None, uow=None):
+def _environment(rate_limiter=None, uow=None, character_repo=None):
     user_repo = FakeRepo(model=DummyUser)
     user_repo.rows.append(DummyUser("user-1"))
     user_repo.rows.append(DummyUser("user-2"))
     draft_repo = FakeRepo(model=CharacterDraft)
-    character_repo = FakeRepo(model=Character)
+    character_repo = character_repo or FakeRepo(model=Character)
     stats_repo = FakeRepo(model=Stat)
     uow = uow or FakeUnitOfWork()
     service = CharacterDraftService(
@@ -80,6 +80,7 @@ def _environment(rate_limiter=None, uow=None):
         user_repository=user_repo,
         unit_of_work=uow,
         rate_limiter=rate_limiter or StubRateLimiter(allowed=True),
+        combat_repository=FakeRepo(model=Combat),
     )
 
     @asynccontextmanager
@@ -159,6 +160,32 @@ def test_character_create_unknown_user_publishes_error():
 
     event, _ = _published(producer)
     assert event.payload == {"ok": False, "error": "User does not exist"}
+
+
+def test_character_edit_command_creates_owned_working_draft():
+    character_repo = FakeRepo(model=Character)
+    dispatcher, producer, draft_repo = _environment(character_repo=character_repo)
+    character_id = uuid4()
+    asyncio.run(character_repo.create(
+        id=character_id, owner_id="user-1", name="Aria", kind="Elf", spec_class="Wizard"
+    ))
+
+    command = _command(MessageType.CHARACTER_UPDATE, {"character_id": str(character_id)})
+    asyncio.run(dispatcher.handle(command))
+    event, _ = _published(producer)
+    assert event.type == MessageType.CHARACTER_UPDATED.value
+    assert event.payload["draft"]["target_character_id"] == str(character_id)
+    assert event.payload["draft"]["data"]["name"] == "Aria"
+    assert len(draft_repo.rows) == 1
+
+    asyncio.run(dispatcher.handle(_command(
+        MessageType.CHARACTER_UPDATE,
+        {"character_id": str(character_id)},
+        headers=_headers("user-2"),
+    )))
+    event, _ = _published(producer)
+    assert event.payload["ok"] is False
+    assert len(draft_repo.rows) == 1
 
 
 def test_character_update_manual_parameter():
@@ -330,6 +357,7 @@ def test_signed_command_with_secret_verifies_and_dispatches():
             user_repository=user_repo,
             unit_of_work=FakeUnitOfWork(),
             rate_limiter=StubRateLimiter(allowed=True),
+            combat_repository=FakeRepo(model=Combat),
         )
 
     producer = AsyncMock()

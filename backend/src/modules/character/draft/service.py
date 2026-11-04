@@ -1,8 +1,8 @@
-import uuid
 from uuid import UUID
 
 from pydantic import ValidationError
 from src.config import settings
+from src.databases.unit_of_work import UnitOfWork
 from src.infrastructure.redis import cache
 from src.modules.auth.repository import UserRepository
 from src.modules.character.base.enums.generation_limits import GenerationLimits
@@ -16,6 +16,7 @@ from src.modules.character.models import CharacterDraft
 from src.modules.character.repositories import (
     CharacterDraftRepository,
     CharacterRepository,
+    CombatRepository,
     StatsRepository,
 )
 from src.modules.character.stats.schemas import StatsCreateSchema
@@ -26,10 +27,11 @@ from src.modules.character.utils import (
     generate_random_stats,
     generate_standard_array,
 )
+from src.modules.character.utils.hit_points import recalculate_combat_hit_dice
+from src.modules.character.utils.ownership import coerce_identifier
 from src.modules.character.utils.random_character import generate_random_character
 from src.utils.exceptions import RateLimitExceeded, ServiceError
 from src.utils.interfaces.rate_limiter import RateLimiter
-from src.databases.unit_of_work import UnitOfWork
 
 PARAMETER_LABELS = {
     "name": "Name",
@@ -142,6 +144,7 @@ class CharacterDraftService:
         user_repository: UserRepository,
         unit_of_work: UnitOfWork,
         rate_limiter: RateLimiter,
+        combat_repository: CombatRepository,
     ):
         self.draft_repo = draft_repository
         self.character_repo = character_repository
@@ -149,6 +152,7 @@ class CharacterDraftService:
         self.user_repo = user_repository
         self.uow = unit_of_work
         self.rate_limiter = rate_limiter
+        self.combat_repo = combat_repository
 
     async def _enforce_daily_generation_limit(
         self, user_id: str, operation: str
@@ -176,13 +180,26 @@ class CharacterDraftService:
                 msg="Character draft not found. Start a new character with /create_character.",
                 code=422,
             ) from exc
-        draft = await self.draft_repo.get_one(id=identifier, owner_id=user_id)
+        draft = await self.draft_repo.get_one(id=identifier, owner_id=coerce_identifier(user_id))
         if draft is None:
             raise ServiceError(
                 msg="Character draft not found. Start a new character with /create_character.",
                 code=422,
             )
+        if draft.saved_character_id is not None:
+            raise ServiceError(
+                msg="This character draft has already been saved.", code=422
+            )
         return draft
+
+    @staticmethod
+    def _saved_result(character) -> dict:
+        return {
+            "character_id": str(character.id),
+            "character": CharacterReadSchema.model_validate(character).model_dump(
+                mode="json"
+            ),
+        }
 
     def _validate_parameter(self, parameter: str, value) -> dict:
         if value is None or (isinstance(value, str) and not value.strip()):
@@ -211,14 +228,39 @@ class CharacterDraftService:
 
     async def create_draft(self, user_id: str) -> CharacterDraftReadSchema:
         await self._enforce_daily_generation_limit(user_id, "create_draft")
-        user = await self.user_repo.get_by_id(user_id)
+        user = await self.user_repo.get_by_id(coerce_identifier(user_id))
         if user is None:
             raise ServiceError(msg="User does not exist", code=422)
 
-        draft = await self.draft_repo.create(owner_id=user_id, data={})
+        draft = await self.draft_repo.create(owner_id=coerce_identifier(user_id), data={})
         await self.uow.commit()
         await self.uow.refresh(draft)
         return CharacterDraftReadSchema.model_validate(draft)
+
+    async def create_edit_draft(
+        self, user_id: str, character_id
+    ) -> CharacterDraftReadSchema:
+        try:
+            identifier = UUID(str(character_id))
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise ServiceError(msg="Character not found.", code=422) from exc
+        character = await self.character_repo.get_one(
+            id=identifier, owner_id=coerce_identifier(user_id)
+        )
+        if character is None:
+            raise ServiceError(msg="Character not found.", code=422)
+        data = {field: getattr(character, field) for field in CHARACTER_DRAFT_FIELDS}
+        stats = await self.stats_repo.get_one(character_id=identifier)
+        if stats is not None:
+            data["stats"] = {field: getattr(stats, field) for field in STAT_FIELDS}
+        draft = await self.draft_repo.create(
+            owner_id=coerce_identifier(user_id), target_character_id=identifier, data=data
+        )
+        await self.uow.commit()
+        await self.uow.refresh(draft)
+        return CharacterDraftReadSchema.model_validate(draft).model_copy(
+            update={"modifiers": compute_modifiers(data["stats"]) if stats else None}
+        )
 
     async def update_parameter(
         self, user_id: str, draft_id, parameter: str, value
@@ -247,8 +289,22 @@ class CharacterDraftService:
         await self.uow.commit()
 
     async def save_character(self, user_id: str, draft_id) -> dict:
-        await self._enforce_daily_generation_limit(user_id, "save_character")
-        draft = await self._get_owned(user_id, draft_id)
+        try:
+            identifier = UUID(str(draft_id))
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise ServiceError(msg="Character draft not found.", code=422) from exc
+        draft = await self.draft_repo.get_owned_for_update(identifier, coerce_identifier(user_id))
+        if draft is None:
+            raise ServiceError(msg="Character draft not found.", code=422)
+        if draft.saved_character_id is not None:
+            character = await self.character_repo.get_one(
+                id=draft.saved_character_id, owner_id=coerce_identifier(user_id)
+            )
+            if character is None:
+                raise ServiceError(msg="Character not found.", code=422)
+            return self._saved_result(character)
+        if draft.target_character_id is None:
+            await self._enforce_daily_generation_limit(user_id, "save_character")
         data = draft.data or {}
         payload = {
             field: data[field]
@@ -265,27 +321,52 @@ class CharacterDraftService:
         stats = data.get("stats")
         stats_values = _draft_stats_values(stats) if stats else None
 
-        character = await self.character_repo.create(
-            id=uuid.uuid4(),
-            owner_id=user_id,
-            **validated.model_dump(),
-        )
-        if stats_values is not None:
-            await self.stats_repo.create(
-                character_id=character.id, **stats_values
+        if draft.target_character_id is None:
+            character = await self.character_repo.create(
+                id=draft.id, owner_id=coerce_identifier(user_id), **validated.model_dump()
             )
-        await self.draft_repo.delete_obj(draft.id)
+            needs_recalculation = False
+        else:
+            character = await self.character_repo.get_one(
+                id=draft.target_character_id, owner_id=coerce_identifier(user_id)
+            )
+            if character is None:
+                raise ServiceError(msg="Character not found.", code=422)
+            needs_recalculation = any(
+                getattr(character, field) != getattr(validated, field)
+                for field in ("level", "spec_class", "kind")
+            )
+            for field, value in validated.model_dump().items():
+                setattr(character, field, value)
+
+        stats = await self.stats_repo.get_one(character_id=character.id)
+        if stats_values is not None:
+            needs_recalculation |= stats is None or any(
+                getattr(stats, field) != value for field, value in stats_values.items()
+            )
+            if stats is None:
+                stats = await self.stats_repo.create(
+                    character_id=character.id, **stats_values
+                )
+            else:
+                for field, value in stats_values.items():
+                    setattr(stats, field, value)
+        if needs_recalculation and draft.target_character_id is not None:
+            combat = await self.combat_repo.get_one(character_id=character.id)
+            if combat is not None:
+                recalculate_combat_hit_dice(combat, character, stats)
+        draft.saved_character_id = character.id
+        draft.data = {}
         await self.uow.commit()
         await self.uow.refresh(character)
 
         await cache.delete_pattern(f"characters:list:{user_id}*")
+        if draft.target_character_id is not None:
+            await cache.delete_pattern(f"characters:by_id:*:{character.id}")
+            await cache.delete_pattern(f"stats:{character.id}")
+            await cache.delete_pattern(f"combat:{character.id}")
 
-        return {
-            "character_id": str(character.id),
-            "character": CharacterReadSchema.model_validate(character).model_dump(
-                mode="json"
-            ),
-        }
+        return self._saved_result(character)
 
     async def generate_character(
         self, user_id: str, draft_id, method: str

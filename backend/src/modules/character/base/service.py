@@ -1,7 +1,6 @@
 from src.config import settings
-from src.utils.exceptions import RateLimitExceeded, ServiceError
-from src.infrastructure.redis import cache
 from src.databases.unit_of_work import UnitOfWork
+from src.infrastructure.redis import cache
 from src.modules.auth.repository import UserRepository
 from src.modules.character.base.enums.generation_limits import GenerationLimits
 from src.modules.character.base.schemas import (
@@ -9,14 +8,18 @@ from src.modules.character.base.schemas import (
     CharacterReadSchema,
     CharacterUpdateSchema,
 )
-from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.repositories import (
     CharacterRepository,
     CombatRepository,
     StatsRepository,
 )
 from src.modules.character.utils.hit_points import recalculate_combat_hit_dice
+from src.modules.character.utils.ownership import (
+    CharacterOwnershipGuard,
+    coerce_identifier,
+)
 from src.modules.character.utils.random_character import generate_random_character
+from src.utils.exceptions import RateLimitExceeded, ServiceError
 from src.utils.interfaces.rate_limiter import RateLimiter
 
 
@@ -113,7 +116,7 @@ class CharacterService:
         if cached is not None:
             return [CharacterReadSchema(**c) for c in cached]
 
-        characters = await self.character_repo.get_many(owner_id=user_id)
+        characters = await self.character_repo.get_many(owner_id=coerce_identifier(user_id))
         result = [CharacterReadSchema.model_validate(char) for char in characters]
         await cache.set(key, [c.model_dump(mode="json") for c in result])
         return result

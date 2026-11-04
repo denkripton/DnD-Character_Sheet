@@ -275,6 +275,9 @@ class FakeRepo:
                 return row
         return None
 
+    async def get_owned_for_update(self, draft_id, user_id):
+        return await self.get_one(id=draft_id, owner_id=user_id)
+
     async def get_many(self, skip: int = 0, limit: int = None, **kwargs):
         rows = [row for row in self.rows if _matches(row, kwargs)]
         if limit is None:

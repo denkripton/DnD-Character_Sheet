@@ -83,6 +83,7 @@ def generation_method_keyboard() -> InlineKeyboardMarkup:
 def generation_result_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Save character", callback_data=CALLBACK_SAVE)],
             [
                 InlineKeyboardButton(
                     text="🎲 Regenerate",

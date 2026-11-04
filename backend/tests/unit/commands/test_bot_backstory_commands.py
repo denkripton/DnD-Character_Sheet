@@ -14,6 +14,7 @@ from src.messaging.enums.constants import (
     AUTH_PROVIDER_USER_ID_HEADER,
     AUTH_USER_ID_HEADER,
 )
+from src.modules.ai.enums import AIErrorMessage
 from src.modules.character.backstory.dependencies import (
     character_backstory_service_scope,
 )
@@ -33,14 +34,7 @@ from src.modules.character.models import (
     Stat,
 )
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
-from src.modules.commands.dispatcher_factory import (
-    AI_AUTH_ERROR_TEXT,
-    AI_MODEL_UNAVAILABLE_ERROR_TEXT,
-    AI_RATE_LIMIT_ERROR_TEXT,
-    AI_TIMEOUT_ERROR_TEXT,
-    AI_UNAVAILABLE_ERROR_TEXT,
-    build_bot_command_dispatcher,
-)
+from src.modules.commands.dispatcher_factory import build_bot_command_dispatcher
 from src.utils.exceptions import (
     AIProviderAuthError,
     AIProviderError,
@@ -129,6 +123,7 @@ def _environment(
         user_repository=user_repo,
         unit_of_work=draft_uow or FakeUnitOfWork(),
         rate_limiter=draft_rate_limiter or StubRateLimiter(allowed=True),
+        combat_repository=FakeRepo(model=Combat),
     )
     guard = CharacterOwnershipGuard(
         character_repository=character_repo, user_repository=user_repo
@@ -276,7 +271,8 @@ def test_character_save_command_creates_character_and_stats():
     assert len(env.stats_repo.rows) == 1
     assert env.stats_repo.rows[0].strength == 15
     assert env.stats_repo.rows[0].charisma == 8
-    assert env.draft_repo.rows == []
+    assert env.draft_repo.rows[0].saved_character_id == env.character_repo.rows[0].id
+    assert env.draft_repo.rows[0].data == {}
 
 
 def test_character_save_requires_identity_headers():
@@ -617,7 +613,7 @@ def test_backstory_generate_ai_timeout_returns_error():
         {"character_id": character_id},
     )
 
-    assert event.payload == {"ok": False, "error": AI_TIMEOUT_ERROR_TEXT}
+    assert event.payload == {"ok": False, "error": AIErrorMessage.TIMEOUT.value}
 
 
 def test_backstory_generate_ai_rate_limit_returns_error():
@@ -632,7 +628,7 @@ def test_backstory_generate_ai_rate_limit_returns_error():
         {"character_id": character_id},
     )
 
-    assert event.payload == {"ok": False, "error": AI_RATE_LIMIT_ERROR_TEXT}
+    assert event.payload == {"ok": False, "error": AIErrorMessage.RATE_LIMIT.value}
 
 
 def test_backstory_generate_ai_provider_error_returns_error():
@@ -647,7 +643,7 @@ def test_backstory_generate_ai_provider_error_returns_error():
         {"character_id": character_id},
     )
 
-    assert event.payload == {"ok": False, "error": AI_UNAVAILABLE_ERROR_TEXT}
+    assert event.payload == {"ok": False, "error": AIErrorMessage.UNAVAILABLE.value}
 
 
 @pytest.mark.parametrize(
@@ -655,11 +651,11 @@ def test_backstory_generate_ai_provider_error_returns_error():
     [
         (
             AIProviderModelUnavailableError("unsafe upstream detail", provider="gemini"),
-            AI_MODEL_UNAVAILABLE_ERROR_TEXT,
+            AIErrorMessage.MODEL_UNAVAILABLE.value,
         ),
         (
             AIProviderAuthError("unsafe upstream detail", provider="gemini"),
-            AI_AUTH_ERROR_TEXT,
+            AIErrorMessage.AUTH.value,
         ),
     ],
 )

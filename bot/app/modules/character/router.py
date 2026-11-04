@@ -111,7 +111,11 @@ def _summary_text(data: dict) -> str:
     kind = draft.get("kind") or "-"
     spec_class = draft.get("spec_class") or "-"
     lines = [
-        "Base identity is saved:",
+        (
+            "Proposed changes (not saved):"
+            if data.get("target_character_id")
+            else "Character draft (not saved):"
+        ),
         f"Name: {name}",
         f"Race: {kind}",
         f"Class: {spec_class}",
@@ -136,7 +140,7 @@ def _summary_text(data: dict) -> str:
 def _generation_result_text(data: dict) -> str:
     draft = data.get("draft_data") or {}
     lines = [
-        "Your character has been generated:",
+        "Generated character draft (not saved):",
         f"Name: {draft.get('name') or '-'}",
         f"Race: {draft.get('kind') or '-'}",
         f"Class: {draft.get('spec_class') or '-'}",
@@ -152,7 +156,9 @@ def _generation_result_text(data: dict) -> str:
         )
         lines.extend(_stats_lines(stats, modifiers))
     lines.append("")
-    lines.append("Regenerate, edit any field, or /cancel to discard the draft.")
+    lines.append(
+        "Save to make this character available, regenerate, edit, or /cancel to discard."
+    )
     return "\n".join(lines)
 
 
@@ -297,6 +303,51 @@ async def handle_create(
     )
 
 
+async def handle_edit_character(
+    message: Message, state, creation_service: CharacterCreationService
+) -> None:
+    data = await state.get_data()
+    auth = data.get("auth")
+    if not auth:
+        await message.answer(CHARACTER_AUTH_REQUIRED_TEXT)
+        return
+    if data.get("draft_id"):
+        await message.answer(CHARACTER_IN_PROGRESS_TEXT)
+        return
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) != 2 or not parts[1].strip():
+        await message.answer(
+            "Use /edit_character <character ID> to edit a saved character."
+        )
+        return
+    try:
+        draft = await creation_service.start_edit(auth, parts[1].strip())
+    except CharacterCreationError as exc:
+        await message.answer(str(exc))
+        return
+    except BackendUnavailableError:
+        await message.answer(CHARACTER_UNAVAILABLE_TEXT)
+        return
+    await state.clear()
+    draft_data = draft.get("data") or {}
+    stats = draft_data.get("stats")
+    await state.update_data(
+        auth=auth,
+        draft_id=draft["id"],
+        draft_data=draft_data,
+        target_character_id=draft["target_character_id"],
+        stats_result=(
+            {"stats": stats, "modifiers": draft.get("modifiers") or {}}
+            if stats
+            else None
+        ),
+    )
+    await state.set_state(CharacterCreationStates.summary)
+    await message.answer(
+        _summary_text(await state.get_data()), reply_markup=navigation_keyboard()
+    )
+
+
 async def handle_step_input(
     message: Message, state, creation_service: CharacterCreationService
 ) -> None:
@@ -426,9 +477,10 @@ async def _save_character(
     if not data.get("draft_id") or not data.get("auth"):
         await callback.answer(CHARACTER_NOT_STARTED_TEXT, show_alert=True)
         return
-    if (
-        await state.get_state()
-    ) != CharacterCreationStates.summary.state:
+    if await state.get_state() not in (
+        CharacterCreationStates.summary.state,
+        CharacterCreationStates.generation_result.state,
+    ):
         await callback.answer(CHARACTER_STALE_TEXT, show_alert=True)
         return
     auth = data["auth"]
@@ -757,6 +809,7 @@ def build_character_creation_router() -> Router:
     router.message.register(
         handle_create, Command("create_character", "create")
     )
+    router.message.register(handle_edit_character, Command("edit_character"))
     router.message.register(handle_back, Command("back"))
     router.message.register(handle_cancel, Command("cancel"))
     router.message.register(

@@ -15,6 +15,12 @@ class CharacterDraft(Base):
         JSON, nullable=False, default=dict, server_default=text("'{}'")
     )
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    target_character_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("characters.id"), nullable=True
+    )
+    saved_character_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
 
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

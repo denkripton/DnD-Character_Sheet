@@ -53,6 +53,20 @@ def test_start_sends_create_command_with_identity():
     assert call["kwargs"]["user_id"] == "user-1"
 
 
+def test_edit_sends_saved_character_identifier_to_backend():
+    service, rabbit = _service(payload={
+        "ok": True,
+        "draft": {"id": "d1", "target_character_id": "c1", "data": {"name": "Aria"}},
+    })
+
+    draft = asyncio.run(service.start_edit(AUTH, "c1"))
+
+    assert draft["target_character_id"] == "c1"
+    assert rabbit.calls[0]["message_type"] == MessageType.CHARACTER_UPDATE
+    assert rabbit.calls[0]["payload"] == {"character_id": "c1"}
+    assert rabbit.calls[0]["kwargs"]["user_id"] == "user-1"
+
+
 def test_set_value_sends_update_parameter_command():
     service, rabbit = _service(payload={"ok": True, "draft": {"id": "d1", "data": {}}})
 

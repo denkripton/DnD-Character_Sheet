@@ -21,6 +21,12 @@ class CharacterCreationService:
         payload = await self._request(MessageType.CHARACTER_CREATE, {}, auth)
         return self._extract_draft(payload)
 
+    async def start_edit(self, auth: dict, character_id: str) -> dict:
+        payload = await self._request(
+            MessageType.CHARACTER_UPDATE, {"character_id": character_id}, auth
+        )
+        return self._extract_draft(payload)
+
     async def set_value(
         self, auth: dict, draft_id: str, parameter: str, value: str
     ) -> dict:

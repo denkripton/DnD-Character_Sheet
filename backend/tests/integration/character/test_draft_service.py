@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 from src.modules.character.draft.service import CharacterDraftService
-from src.modules.character.models import Character, CharacterDraft, Stat
+from src.modules.character.models import Character, CharacterDraft, Combat, Stat
 from src.modules.character.utils.random_character import KINDS, NAMES, SPEC_CLASSES
 from src.utils.exceptions import RateLimitExceeded, ServiceError
 from tests.utils import FakeRepo, FakeUnitOfWork, StubRateLimiter
@@ -27,6 +27,7 @@ def _service(rate_limiter=None):
         user_repository=user_repo,
         unit_of_work=uow,
         rate_limiter=rate_limiter or StubRateLimiter(allowed=True),
+        combat_repository=FakeRepo(model=Combat),
     )
     return service, draft_repo, uow
 
@@ -551,7 +552,7 @@ def test_stats_then_parameters_keep_both_in_draft():
     asyncio.run(flow())
 
 
-def test_save_character_creates_character_stats_and_deletes_draft():
+def test_save_character_creates_character_stats_and_consumes_draft():
     service, draft_repo, uow = _service()
 
     async def flow():
@@ -576,8 +577,121 @@ def test_save_character_creates_character_stats_and_deletes_draft():
         assert len(service.stats_repo.rows) == 1
         assert service.stats_repo.rows[0].strength == STANDARD_STATS["strength"]
         assert service.stats_repo.rows[0].charisma == STANDARD_STATS["charisma"]
-        assert draft_repo.rows == []
+        assert draft_repo.rows[0].saved_character_id == service.character_repo.rows[0].id
+        assert result["character_id"] == str(draft.id)
         assert uow.commit_calls == commits_before + 1
+
+    asyncio.run(flow())
+
+
+def test_save_retry_returns_same_character_without_new_write():
+    service, draft_repo, uow = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        for key, value in (("name", "Aria"), ("kind", "Elf"), ("spec_class", "Wizard")):
+            await service.update_parameter("user-1", draft.id, key, value)
+        first = await service.save_character("user-1", draft.id)
+        commits = uow.commit_calls
+        second = await service.save_character("user-1", draft.id)
+        assert first == second
+        assert len(service.character_repo.rows) == 1
+        assert uow.commit_calls == commits
+        with pytest.raises(ServiceError, match="already been saved"):
+            await service.update_parameter("user-1", draft.id, "name", "Other")
+        assert draft_repo.rows[0].data == {}
+
+    asyncio.run(flow())
+
+
+def test_edit_draft_changes_saved_character_only_on_confirmation():
+    service, draft_repo, _ = _service()
+
+    async def flow():
+        original = await service.character_repo.create(
+            name="Aria", kind="Elf", spec_class="Wizard", owner_id="user-1"
+        )
+        draft = await service.create_edit_draft("user-1", original.id)
+        assert draft.target_character_id == original.id
+        await service.update_parameter("user-1", draft.id, "name", "Lyra")
+        await service.generate_stats("user-1", draft.id, "standard")
+        assert original.name == "Aria"
+        assert service.stats_repo.rows == []
+        result = await service.save_character("user-1", draft.id)
+        assert result["character_id"] == str(original.id)
+        assert original.name == "Lyra"
+        assert len(service.character_repo.rows) == 1
+        assert len(service.stats_repo.rows) == 1
+        assert draft_repo.rows[0].saved_character_id == original.id
+
+    asyncio.run(flow())
+
+
+def test_cancelling_edit_draft_preserves_saved_character():
+    service, draft_repo, _ = _service()
+
+    async def flow():
+        original = await service.character_repo.create(
+            name="Aria", kind="Elf", spec_class="Wizard", owner_id="user-1"
+        )
+        draft = await service.create_edit_draft("user-1", original.id)
+        await service.update_parameter("user-1", draft.id, "name", "Lyra")
+        await service.delete_draft("user-1", draft.id)
+        assert draft_repo.rows == []
+        assert original.name == "Aria"
+        assert len(service.character_repo.rows) == 1
+
+    asyncio.run(flow())
+
+
+def test_invalid_edit_does_not_change_saved_character():
+    service, draft_repo, _ = _service()
+
+    async def flow():
+        original = await service.character_repo.create(
+            name="Aria", kind="Elf", spec_class="Wizard", owner_id="user-1"
+        )
+        draft = await service.create_edit_draft("user-1", original.id)
+        draft_repo.rows[0].data = {
+            **draft_repo.rows[0].data,
+            "name": "Lyra",
+            "stats": {"strength": 99},
+        }
+        with pytest.raises(ServiceError, match="Ability scores"):
+            await service.save_character("user-1", draft.id)
+        assert original.name == "Aria"
+        assert draft_repo.rows[0].saved_character_id is None
+
+    asyncio.run(flow())
+
+
+def test_edit_draft_rejects_other_users_character():
+    service, draft_repo, _ = _service()
+
+    async def flow():
+        original = await service.character_repo.create(
+            name="Aria", kind="Elf", spec_class="Wizard", owner_id="user-1"
+        )
+        with pytest.raises(ServiceError, match="not found"):
+            await service.create_edit_draft("user-2", original.id)
+        assert draft_repo.rows == []
+
+    asyncio.run(flow())
+
+
+def test_regeneration_replaces_working_draft_without_saving_character():
+    service, draft_repo, _ = _service()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        with _fixed_generation():
+            await service.generate_character("user-1", draft.id, "standard")
+            await service.generate_character("user-1", draft.id, "standard")
+        assert len(draft_repo.rows) == 1
+        assert draft_repo.rows[0].id == draft.id
+        assert service.character_repo.rows == []
+        await service.delete_draft("user-1", draft.id)
+        assert service.character_repo.rows == []
 
     asyncio.run(flow())
 

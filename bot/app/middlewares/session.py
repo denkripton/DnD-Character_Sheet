@@ -42,7 +42,7 @@ class SessionMiddleware(BaseMiddleware):
                 return await handler(event, data)
             needs_session = (
                 command
-                in {"/create", "/create_character", "/backstory", "/back", "/cancel"}
+                in {"/create", "/create_character", "/edit_character", "/backstory", "/back", "/cancel"}
                 or await state.get_state() is not None
             )
         else:
