@@ -2,7 +2,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import Depends
+
 from src.databases.sql import AsyncSessionLocal
+from src.databases.unit_of_work import UnitOfWork
 from src.dependencies import get_rate_limiter, get_unit_of_work
 from src.modules.ai import AIService, get_ai_service
 from src.modules.auth.repository import UserRepository
@@ -11,6 +13,7 @@ from src.modules.character.dependencies import (
     backstory_repository,
     character_ownership_guard,
     combat_repository,
+    draft_repository,
     feature_repository,
     personality_repository,
     proficiency_repository,
@@ -20,6 +23,7 @@ from src.modules.character.dependencies import (
 )
 from src.modules.character.repositories import (
     BackstoryRepository,
+    CharacterDraftRepository,
     CharacterRepository,
     CombatRepository,
     FeatureRepository,
@@ -31,7 +35,6 @@ from src.modules.character.repositories import (
 )
 from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.utils.interfaces.rate_limiter import RateLimiter
-from src.databases.unit_of_work import UnitOfWork
 
 
 def get_backstory_service(
@@ -47,6 +50,7 @@ def get_backstory_service(
     saving_throws_repo: SavingThrowsRepository = Depends(saving_throws_repository),
     uow: UnitOfWork = Depends(get_unit_of_work),
     rate_limiter: RateLimiter = Depends(get_rate_limiter),
+    draft_repo: CharacterDraftRepository = Depends(draft_repository),
 ) -> BackstoryService:
     return BackstoryService(
         ownership_guard=ownership,
@@ -61,6 +65,7 @@ def get_backstory_service(
         saving_throws_repository=saving_throws_repo,
         unit_of_work=uow,
         rate_limiter=rate_limiter,
+        draft_repository=draft_repo,
     )
 
 
@@ -83,4 +88,5 @@ async def character_backstory_service_scope() -> AsyncIterator[BackstoryService]
             saving_throws_repository=SavingThrowsRepository(session),
             unit_of_work=UnitOfWork(session),
             rate_limiter=get_rate_limiter(),
+            draft_repository=CharacterDraftRepository(session),
         )

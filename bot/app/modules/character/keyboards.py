@@ -17,6 +17,7 @@ CALLBACK_REGEN = f"{CALLBACK_PREFIX}:regen"
 CALLBACK_EDIT = f"{CALLBACK_PREFIX}:edit"
 CALLBACK_CONFIRM = f"{CALLBACK_PREFIX}:confirm"
 CALLBACK_SAVE = f"{CALLBACK_PREFIX}:save"
+CALLBACK_BACKSTORY = f"{CALLBACK_PREFIX}:backstory"
 CALLBACK_GEN_FULL = f"{CALLBACK_PREFIX}:gen_full"
 CALLBACK_GEN_STEP = f"{CALLBACK_PREFIX}:gen_step"
 CALLBACK_FULL_METHOD = f"{CALLBACK_PREFIX}:full_method"
@@ -36,6 +37,11 @@ def navigation_keyboard() -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     text="✅ Save character", callback_data=CALLBACK_SAVE
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✨ Generate backstory", callback_data=CALLBACK_BACKSTORY
                 )
             ],
             [
@@ -83,7 +89,16 @@ def generation_method_keyboard() -> InlineKeyboardMarkup:
 def generation_result_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Save character", callback_data=CALLBACK_SAVE)],
+            [
+                InlineKeyboardButton(
+                    text="✅ Save character", callback_data=CALLBACK_SAVE
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✨ Generate backstory", callback_data=CALLBACK_BACKSTORY
+                )
+            ],
             [
                 InlineKeyboardButton(
                     text="🎲 Regenerate",
@@ -95,9 +110,7 @@ def generation_result_keyboard() -> InlineKeyboardMarkup:
                 ),
             ],
             [
-                InlineKeyboardButton(
-                    text="❌ Cancel", callback_data=CALLBACK_CANCEL
-                ),
+                InlineKeyboardButton(text="❌ Cancel", callback_data=CALLBACK_CANCEL),
             ],
         ]
     )

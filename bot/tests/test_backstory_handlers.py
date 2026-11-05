@@ -107,6 +107,10 @@ class FakeCreationService:
         self.saved_backstories.append((character_id, backstory))
         return backstory
 
+    async def save_character(self, auth, draft_id, backstory=None):
+        self.saved_backstories.append((draft_id, backstory))
+        return {"character_id": "char-1", "character": {}}
+
 
 def _message(text=None):
     message = AsyncMock()
@@ -367,6 +371,24 @@ def test_accept_saves_backstory_and_returns_to_hub():
     assert _callback_data(_keyboard(callback.message)) == _callback_data(
         backstory_hub_keyboard()
     )
+
+
+def test_accept_draft_saves_character_and_backstory_together():
+    state = FakeState(
+        data={
+            "auth": dict(AUTH),
+            "draft_id": "draft-1",
+            "draft_data": {"name": "Aria", "kind": "Elf", "spec_class": "Wizard"},
+            "backstory": "A wandering hero.",
+        },
+        state=BackstoryStates.review.state,
+    )
+    service = FakeCreationService()
+
+    asyncio.run(handle_backstory_callback(_callback("bs:accept"), state, service))
+
+    assert service.saved_backstories == [("draft-1", "A wandering hero.")]
+    assert state.state == BackstoryStates.character_saved.state
 
 
 def test_accept_backend_rejection_keeps_review_state():

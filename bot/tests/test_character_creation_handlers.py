@@ -1294,6 +1294,17 @@ def test_summary_keyboard_offers_save_character_button():
     assert CALLBACK_CANCEL in callback_data
 
 
+def test_summary_backstory_button_keeps_character_draft_unsaved():
+    service, state = _to_summary()
+
+    callback = _callback("cc:backstory")
+    asyncio.run(handle_callback(callback, state, service))
+
+    assert state.state == BackstoryStates.prompt.state
+    assert state.data["draft_id"] == "draft-1"
+    assert service.saved == []
+
+
 def test_save_character_button_transitions_to_backstory_hub():
     service, state = _to_summary()
 

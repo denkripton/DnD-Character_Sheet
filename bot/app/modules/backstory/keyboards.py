@@ -22,11 +22,7 @@ def backstory_hub_keyboard() -> InlineKeyboardMarkup:
                     callback_data=CALLBACK_START,
                 )
             ],
-            [
-                InlineKeyboardButton(
-                    text="✅ Done", callback_data=CALLBACK_CLOSE
-                )
-            ],
+            [InlineKeyboardButton(text="✅ Done", callback_data=CALLBACK_CLOSE)],
         ]
     )
 
@@ -39,18 +35,10 @@ def backstory_prompt_keyboard() -> InlineKeyboardMarkup:
                     text="🤖 Choose AI model", callback_data=CALLBACK_MODELS
                 )
             ],
+            [InlineKeyboardButton(text="🎲 Generate", callback_data=CALLBACK_GENERATE)],
             [
-                InlineKeyboardButton(
-                    text="🎲 Generate", callback_data=CALLBACK_GENERATE
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="⬅️ Back", callback_data=CALLBACK_BACK
-                ),
-                InlineKeyboardButton(
-                    text="❌ Cancel", callback_data=CALLBACK_CANCEL
-                ),
+                InlineKeyboardButton(text="⬅️ Back", callback_data=CALLBACK_BACK),
+                InlineKeyboardButton(text="❌ Cancel", callback_data=CALLBACK_CANCEL),
             ],
         ]
     )
@@ -65,20 +53,19 @@ def backstory_review_keyboard() -> InlineKeyboardMarkup:
                 )
             ],
             [
-                InlineKeyboardButton(
-                    text="✅ Accept", callback_data=CALLBACK_ACCEPT
-                ),
+                InlineKeyboardButton(text="✅ Accept", callback_data=CALLBACK_ACCEPT),
                 InlineKeyboardButton(
                     text="🔄 Regenerate", callback_data=CALLBACK_REGENERATE
                 ),
             ],
             [
+                InlineKeyboardButton(text="✏️ Edit", callback_data=CALLBACK_EDIT),
+                InlineKeyboardButton(text="❌ Cancel", callback_data=CALLBACK_CANCEL),
+            ],
+            [
                 InlineKeyboardButton(
-                    text="✏️ Edit", callback_data=CALLBACK_EDIT
-                ),
-                InlineKeyboardButton(
-                    text="❌ Cancel", callback_data=CALLBACK_CANCEL
-                ),
+                    text="⬅️ Back to character", callback_data=CALLBACK_BACK
+                )
             ],
         ]
     )
@@ -88,12 +75,8 @@ def backstory_edit_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(
-                    text="⬅️ Back", callback_data=CALLBACK_BACK
-                ),
-                InlineKeyboardButton(
-                    text="❌ Cancel", callback_data=CALLBACK_CANCEL
-                ),
+                InlineKeyboardButton(text="⬅️ Back", callback_data=CALLBACK_BACK),
+                InlineKeyboardButton(text="❌ Cancel", callback_data=CALLBACK_CANCEL),
             ]
         ]
     )
@@ -112,7 +95,5 @@ def backstory_model_keyboard(
         for provider in providers
         for model in provider["models"]
     ]
-    rows.append(
-        [InlineKeyboardButton(text="⬅️ Back", callback_data=CALLBACK_BACK)]
-    )
+    rows.append([InlineKeyboardButton(text="⬅️ Back", callback_data=CALLBACK_BACK)])
     return InlineKeyboardMarkup(inline_keyboard=rows)

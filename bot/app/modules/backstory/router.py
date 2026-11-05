@@ -22,11 +22,13 @@ from app.modules.backstory.keyboards import (
     backstory_review_keyboard,
 )
 from app.modules.backstory.states import BackstoryStates
+from app.modules.character.keyboards import navigation_keyboard
 from app.modules.character.service import (
     BackendUnavailableError,
     CharacterCreationError,
     CharacterCreationService,
 )
+from app.modules.character.states import CharacterCreationStates
 from app.presentation.messages import (
     BACKSTORY_CLOSED_TEXT,
     BACKSTORY_DISCARDED_TEXT,
@@ -75,9 +77,10 @@ async def _context(state) -> tuple[dict, str] | None:
     data = await state.get_data()
     auth = data.get("auth")
     character_id = data.get("character_id")
-    if not auth or not character_id:
+    draft_id = data.get("draft_id")
+    if not auth or not character_id and not draft_id:
         return None
-    return auth, character_id
+    return auth, character_id or draft_id
 
 
 def _review_text(backstory: str) -> str:
@@ -89,9 +92,7 @@ def _review_text(backstory: str) -> str:
 
 async def _show_hub(target, state) -> None:
     await _reset_to_hub(state)
-    await target.answer(
-        CHARACTER_SAVED_TEXT, reply_markup=backstory_hub_keyboard()
-    )
+    await target.answer(CHARACTER_SAVED_TEXT, reply_markup=backstory_hub_keyboard())
 
 
 async def _show_review(target, state, backstory: str) -> None:
@@ -102,26 +103,34 @@ async def _show_review(target, state, backstory: str) -> None:
     )
 
 
-async def _generate(
-    target, state, creation_service: CharacterCreationService
-) -> None:
+async def _generate(target, state, creation_service: CharacterCreationService) -> None:
     context = await _context(state)
     if context is None:
         await target.answer(BACKSTORY_NOT_STARTED_TEXT)
         return
-    auth, character_id = context
+    auth, identifier = context
     data = await state.get_data()
     model = data.get("ai_model")
     provider = data.get("ai_provider")
     await target.answer(BACKSTORY_GENERATING_TEXT)
     try:
-        backstory = await creation_service.generate_backstory(
-            auth,
-            character_id,
-            prompt=data.get("backstory_prompt"),
-            model=model,
-            provider=provider,
-        )
+        if data.get("draft_id"):
+            backstory = await creation_service.generate_backstory(
+                auth,
+                None,
+                prompt=data.get("backstory_prompt"),
+                model=model,
+                provider=provider,
+                draft_id=data["draft_id"],
+            )
+        else:
+            backstory = await creation_service.generate_backstory(
+                auth,
+                identifier,
+                prompt=data.get("backstory_prompt"),
+                model=model,
+                provider=provider,
+            )
     except CharacterCreationError as exc:
         await target.answer(str(exc))
         return
@@ -176,9 +185,7 @@ async def handle_backstory_command(message: Message, state) -> None:
         await message.answer(BACKSTORY_HUB_HINT_TEXT)
         return
     await state.set_state(BackstoryStates.prompt)
-    await message.answer(
-        BACKSTORY_START_TEXT, reply_markup=backstory_prompt_keyboard()
-    )
+    await message.answer(BACKSTORY_START_TEXT, reply_markup=backstory_prompt_keyboard())
 
 
 async def handle_review_hint(message: Message, state) -> None:
@@ -198,9 +205,7 @@ async def _start_flow(callback: CallbackQuery, state) -> None:
     if await _context(state) is None:
         await callback.answer(BACKSTORY_NOT_STARTED_TEXT, show_alert=True)
         return
-    if (
-        await state.get_state()
-    ) != BackstoryStates.character_saved.state:
+    if (await state.get_state()) != BackstoryStates.character_saved.state:
         await callback.answer(CHARACTER_STALE_TEXT, show_alert=True)
         return
     await state.set_state(BackstoryStates.prompt)
@@ -253,7 +258,19 @@ async def _accept(
         return
     auth, character_id = context
     try:
-        await creation_service.save_backstory(auth, character_id, backstory)
+        if data.get("draft_id"):
+            result = await creation_service.save_character(
+                auth, data["draft_id"], backstory
+            )
+            await state.clear()
+            await state.update_data(
+                auth=auth,
+                character_id=result["character_id"],
+                character=result.get("character") or {},
+            )
+            await state.set_state(BackstoryStates.character_saved)
+        else:
+            await creation_service.save_backstory(auth, character_id, backstory)
     except CharacterCreationError as exc:
         await callback.answer()
         await callback.message.answer(str(exc))
@@ -261,6 +278,12 @@ async def _accept(
     except BackendUnavailableError:
         await callback.answer()
         await callback.message.answer(CHARACTER_UNAVAILABLE_TEXT)
+        return
+    if data.get("draft_id"):
+        await callback.answer()
+        await callback.message.answer(
+            CHARACTER_SAVED_TEXT, reply_markup=backstory_hub_keyboard()
+        )
         return
     await _reset_to_hub(state)
     await callback.answer()
@@ -330,9 +353,34 @@ async def _back(callback: CallbackQuery, state) -> None:
         await callback.message.answer("Choose an AI model.", reply_markup=keyboard)
         return
     if current == BackstoryStates.prompt.state:
+        if (await state.get_data()).get("draft_id"):
+            data = await state.get_data()
+            await state.set_state(CharacterCreationStates.summary)
+            await callback.answer()
+            await callback.message.answer(
+                "Character preview:\n"
+                f"Name: {data.get('draft_data', {}).get('name') or '-'}\n"
+                f"Race: {data.get('draft_data', {}).get('kind') or '-'}\n"
+                f"Class: {data.get('draft_data', {}).get('spec_class') or '-'}",
+                reply_markup=navigation_keyboard(),
+            )
+            return
         await callback.answer()
         await _show_hub(callback.message, state)
         return
+    if current == BackstoryStates.review.state:
+        data = await state.get_data()
+        if data.get("draft_id"):
+            await state.set_state(CharacterCreationStates.summary)
+            await callback.answer()
+            await callback.message.answer(
+                "Character preview:\n"
+                f"Name: {data.get('draft_data', {}).get('name') or '-'}\n"
+                f"Race: {data.get('draft_data', {}).get('kind') or '-'}\n"
+                f"Class: {data.get('draft_data', {}).get('spec_class') or '-'}",
+                reply_markup=navigation_keyboard(),
+            )
+            return
     if current == BackstoryStates.edit.state:
         data = await state.get_data()
         backstory = data.get("backstory")
@@ -434,9 +482,7 @@ async def _close(callback: CallbackQuery, state) -> None:
     if await _context(state) is None:
         await callback.answer(BACKSTORY_NOT_STARTED_TEXT, show_alert=True)
         return
-    if (await state.get_state()) not in tuple(
-        item.state for item in BACKSTORY_STATES
-    ):
+    if (await state.get_state()) not in tuple(item.state for item in BACKSTORY_STATES):
         await callback.answer(CHARACTER_STALE_TEXT, show_alert=True)
         return
     await callback.answer()
@@ -488,17 +534,11 @@ def build_backstory_router() -> Router:
         StateFilter(*BACKSTORY_STATES),
     )
     router.message.register(handle_backstory_command, Command("backstory"))
-    router.message.register(
-        handle_prompt_input, BackstoryStates.prompt
-    )
+    router.message.register(handle_prompt_input, BackstoryStates.prompt)
     router.message.register(handle_edit_input, BackstoryStates.edit)
     router.message.register(handle_review_hint, BackstoryStates.review)
-    router.message.register(
-        handle_hub_hint, BackstoryStates.character_saved
-    )
-    router.callback_query.register(
-        handle_backstory_callback, F.data.startswith("bs:")
-    )
+    router.message.register(handle_hub_hint, BackstoryStates.character_saved)
+    router.callback_query.register(handle_backstory_callback, F.data.startswith("bs:"))
     return router
 
 

@@ -4,10 +4,12 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
 from app.modules.backstory.keyboards import (
     backstory_hub_keyboard,
+    backstory_prompt_keyboard,
 )
 from app.modules.backstory.states import BackstoryStates
 from app.modules.character.keyboards import (
     CALLBACK_BACK,
+    CALLBACK_BACKSTORY,
     CALLBACK_CANCEL,
     CALLBACK_CONFIRM,
     CALLBACK_EDIT,
@@ -224,9 +226,7 @@ async def _submit_value(
     value: str,
 ) -> None:
     try:
-        draft = await creation_service.set_value(
-            auth, draft_id, step.field, value
-        )
+        draft = await creation_service.set_value(auth, draft_id, step.field, value)
     except CharacterCreationError as exc:
         await target.answer(str(exc))
         return
@@ -444,9 +444,7 @@ async def handle_back(message: Message, state) -> None:
     await message.answer(text, reply_markup=reply_markup)
 
 
-async def _cancel(
-    target, state, creation_service: CharacterCreationService
-) -> None:
+async def _cancel(target, state, creation_service: CharacterCreationService) -> None:
     data = await state.get_data()
     auth = data.get("auth")
     draft_id = data.get("draft_id")
@@ -505,6 +503,25 @@ async def _save_character(
     await callback.answer()
     await callback.message.answer(
         CHARACTER_SAVED_TEXT, reply_markup=backstory_hub_keyboard()
+    )
+
+
+async def _start_backstory(callback: CallbackQuery, state) -> None:
+    data = await state.get_data()
+    if not data.get("draft_id") or not data.get("auth"):
+        await callback.answer(CHARACTER_NOT_STARTED_TEXT, show_alert=True)
+        return
+    if await state.get_state() not in (
+        CharacterCreationStates.summary.state,
+        CharacterCreationStates.generation_result.state,
+    ):
+        await callback.answer(CHARACTER_STALE_TEXT, show_alert=True)
+        return
+    await state.set_state(BackstoryStates.prompt)
+    await callback.answer()
+    await callback.message.answer(
+        "Optional: tell me what the backstory should focus on, or tap Generate.",
+        reply_markup=backstory_prompt_keyboard(),
     )
 
 
@@ -595,9 +612,7 @@ async def _start_field_editing(callback: CallbackQuery, state) -> None:
     if not data.get("draft_id") or not data.get("auth"):
         await callback.answer(CHARACTER_NOT_STARTED_TEXT, show_alert=True)
         return
-    if (
-        await state.get_state()
-    ) != CharacterCreationStates.generation_result.state:
+    if (await state.get_state()) != CharacterCreationStates.generation_result.state:
         await callback.answer(CHARACTER_STALE_TEXT, show_alert=True)
         return
     first_step = STEPS[0]
@@ -688,7 +703,9 @@ async def _regenerate(
 
 async def _edit_values(callback: CallbackQuery, state) -> None:
     data = await state.get_data()
-    if position_for_state(await state.get_state()) != "stats" or not data.get("draft_id"):
+    if position_for_state(await state.get_state()) != "stats" or not data.get(
+        "draft_id"
+    ):
         await callback.answer(CHARACTER_STALE_TEXT, show_alert=True)
         return
     await callback.answer()
@@ -759,6 +776,9 @@ async def handle_callback(
     if raw == CALLBACK_CONFIRM:
         await _confirm_stats(callback, state)
         return
+    if raw == CALLBACK_BACKSTORY:
+        await _start_backstory(callback, state)
+        return
     if raw == CALLBACK_SAVE:
         await _save_character(callback, state, creation_service)
         return
@@ -773,9 +793,7 @@ async def handle_callback(
     if context is None:
         data = await state.get_data()
         notice = (
-            CHARACTER_STALE_TEXT
-            if data.get("draft_id")
-            else CHARACTER_NOT_STARTED_TEXT
+            CHARACTER_STALE_TEXT if data.get("draft_id") else CHARACTER_NOT_STARTED_TEXT
         )
         await callback.answer(notice, show_alert=True)
         return
@@ -806,9 +824,7 @@ async def handle_callback(
 
 def build_character_creation_router() -> Router:
     router = Router(name="character_creation")
-    router.message.register(
-        handle_create, Command("create_character", "create")
-    )
+    router.message.register(handle_create, Command("create_character", "create"))
     router.message.register(handle_edit_character, Command("edit_character"))
     router.message.register(handle_back, Command("back"))
     router.message.register(handle_cancel, Command("cancel"))
@@ -831,12 +847,8 @@ def build_character_creation_router() -> Router:
     router.message.register(
         handle_stats_method_input, CharacterCreationStates.stats_method
     )
-    router.message.register(
-        handle_stats_input, CharacterCreationStates.stats
-    )
-    router.message.register(
-        handle_summary_input, CharacterCreationStates.summary
-    )
+    router.message.register(handle_stats_input, CharacterCreationStates.stats)
+    router.message.register(handle_summary_input, CharacterCreationStates.summary)
     router.callback_query.register(handle_callback, F.data.startswith("cc:"))
     return router
 

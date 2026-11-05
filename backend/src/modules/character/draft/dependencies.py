@@ -3,22 +3,25 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 from fastapi import Depends
+
 from src.databases.sql import AsyncSessionLocal
 from src.databases.unit_of_work import UnitOfWork
 from src.dependencies import get_rate_limiter, get_unit_of_work
 from src.modules.auth.dependencies import user_repository
 from src.modules.auth.repository import UserRepository
-from src.modules.character.repositories import (
-    CharacterDraftRepository,
-    CharacterRepository,
-    CombatRepository,
-    StatsRepository,
-)
 from src.modules.character.dependencies import (
+    backstory_repository,
     character_repository,
     combat_repository,
     draft_repository,
     stats_repository,
+)
+from src.modules.character.repositories import (
+    BackstoryRepository,
+    CharacterDraftRepository,
+    CharacterRepository,
+    CombatRepository,
+    StatsRepository,
 )
 from src.utils.interfaces.rate_limiter import RateLimiter
 
@@ -34,6 +37,7 @@ def get_character_draft_service(
     unit_of_work: UnitOfWork = Depends(get_unit_of_work),
     rate_limiter: RateLimiter = Depends(get_rate_limiter),
     combat_repository: CombatRepository = Depends(combat_repository),
+    backstory_repository: BackstoryRepository = Depends(backstory_repository),
 ) -> "CharacterDraftService":
     from src.modules.character.draft.service import CharacterDraftService
 
@@ -45,6 +49,7 @@ def get_character_draft_service(
         unit_of_work=unit_of_work,
         rate_limiter=rate_limiter,
         combat_repository=combat_repository,
+        backstory_repository=backstory_repository,
     )
 
 
@@ -61,4 +66,5 @@ async def character_draft_service_scope() -> AsyncIterator["CharacterDraftServic
             unit_of_work=UnitOfWork(session),
             rate_limiter=get_rate_limiter(),
             combat_repository=CombatRepository(session),
+            backstory_repository=BackstoryRepository(session),
         )

@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from pydantic import ValidationError
+
 from src.config import settings
 from src.databases.unit_of_work import UnitOfWork
 from src.infrastructure.redis import cache
@@ -14,6 +15,7 @@ from src.modules.character.base.schemas import (
 from src.modules.character.draft.schemas import CharacterDraftReadSchema
 from src.modules.character.models import CharacterDraft
 from src.modules.character.repositories import (
+    BackstoryRepository,
     CharacterDraftRepository,
     CharacterRepository,
     CombatRepository,
@@ -126,7 +128,11 @@ def _draft_stats_values(stats) -> dict:
     values = {}
     for field in STAT_FIELDS:
         value = stats.get(field)
-        if isinstance(value, bool) or not isinstance(value, int) or not 3 <= value <= 20:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or not 3 <= value <= 20
+        ):
             raise ServiceError(
                 msg="Ability scores must be whole numbers between 3 and 20.",
                 code=422,
@@ -145,6 +151,7 @@ class CharacterDraftService:
         unit_of_work: UnitOfWork,
         rate_limiter: RateLimiter,
         combat_repository: CombatRepository,
+        backstory_repository: BackstoryRepository | None = None,
     ):
         self.draft_repo = draft_repository
         self.character_repo = character_repository
@@ -153,6 +160,7 @@ class CharacterDraftService:
         self.uow = unit_of_work
         self.rate_limiter = rate_limiter
         self.combat_repo = combat_repository
+        self.backstory_repo = backstory_repository
 
     async def _enforce_daily_generation_limit(
         self, user_id: str, operation: str
@@ -180,7 +188,9 @@ class CharacterDraftService:
                 msg="Character draft not found. Start a new character with /create_character.",
                 code=422,
             ) from exc
-        draft = await self.draft_repo.get_one(id=identifier, owner_id=coerce_identifier(user_id))
+        draft = await self.draft_repo.get_one(
+            id=identifier, owner_id=coerce_identifier(user_id)
+        )
         if draft is None:
             raise ServiceError(
                 msg="Character draft not found. Start a new character with /create_character.",
@@ -232,7 +242,9 @@ class CharacterDraftService:
         if user is None:
             raise ServiceError(msg="User does not exist", code=422)
 
-        draft = await self.draft_repo.create(owner_id=coerce_identifier(user_id), data={})
+        draft = await self.draft_repo.create(
+            owner_id=coerce_identifier(user_id), data={}
+        )
         await self.uow.commit()
         await self.uow.refresh(draft)
         return CharacterDraftReadSchema.model_validate(draft)
@@ -254,7 +266,9 @@ class CharacterDraftService:
         if stats is not None:
             data["stats"] = {field: getattr(stats, field) for field in STAT_FIELDS}
         draft = await self.draft_repo.create(
-            owner_id=coerce_identifier(user_id), target_character_id=identifier, data=data
+            owner_id=coerce_identifier(user_id),
+            target_character_id=identifier,
+            data=data,
         )
         await self.uow.commit()
         await self.uow.refresh(draft)
@@ -288,12 +302,16 @@ class CharacterDraftService:
         await self.draft_repo.delete_obj(draft.id)
         await self.uow.commit()
 
-    async def save_character(self, user_id: str, draft_id) -> dict:
+    async def save_character(
+        self, user_id: str, draft_id, backstory: str | None = None
+    ) -> dict:
         try:
             identifier = UUID(str(draft_id))
         except (TypeError, ValueError, AttributeError) as exc:
             raise ServiceError(msg="Character draft not found.", code=422) from exc
-        draft = await self.draft_repo.get_owned_for_update(identifier, coerce_identifier(user_id))
+        draft = await self.draft_repo.get_owned_for_update(
+            identifier, coerce_identifier(user_id)
+        )
         if draft is None:
             raise ServiceError(msg="Character draft not found.", code=422)
         if draft.saved_character_id is not None:
@@ -303,27 +321,27 @@ class CharacterDraftService:
             if character is None:
                 raise ServiceError(msg="Character not found.", code=422)
             return self._saved_result(character)
+        if backstory is not None and (not backstory.strip() or len(backstory) > 10000):
+            raise ServiceError(msg="Backstory text is invalid.", code=422)
         if draft.target_character_id is None:
             await self._enforce_daily_generation_limit(user_id, "save_character")
         data = draft.data or {}
         payload = {
-            field: data[field]
-            for field in CHARACTER_DRAFT_FIELDS
-            if field in data
+            field: data[field] for field in CHARACTER_DRAFT_FIELDS if field in data
         }
         try:
             validated = CharacterCreateSchema(**payload)
         except ValidationError as exc:
-            raise ServiceError(
-                msg=friendly_validation_message(exc), code=422
-            ) from exc
+            raise ServiceError(msg=friendly_validation_message(exc), code=422) from exc
 
         stats = data.get("stats")
         stats_values = _draft_stats_values(stats) if stats else None
 
         if draft.target_character_id is None:
             character = await self.character_repo.create(
-                id=draft.id, owner_id=coerce_identifier(user_id), **validated.model_dump()
+                id=draft.id,
+                owner_id=coerce_identifier(user_id),
+                **validated.model_dump(),
             )
             needs_recalculation = False
         else:
@@ -355,6 +373,18 @@ class CharacterDraftService:
             combat = await self.combat_repo.get_one(character_id=character.id)
             if combat is not None:
                 recalculate_combat_hit_dice(combat, character, stats)
+        if backstory is not None:
+            if self.backstory_repo is None:
+                raise ServiceError(msg="Backstory saving is unavailable.", code=422)
+            saved_backstory = await self.backstory_repo.get_one(
+                character_id=character.id
+            )
+            if saved_backstory is None:
+                await self.backstory_repo.create(
+                    character_id=character.id, backstory=backstory
+                )
+            else:
+                saved_backstory.backstory = backstory
         draft.saved_character_id = character.id
         draft.data = {}
         await self.uow.commit()
@@ -368,9 +398,7 @@ class CharacterDraftService:
 
         return self._saved_result(character)
 
-    async def generate_character(
-        self, user_id: str, draft_id, method: str
-    ) -> dict:
+    async def generate_character(self, user_id: str, draft_id, method: str) -> dict:
         await self._enforce_daily_generation_limit(user_id, "generate_character")
         draft = await self._get_owned(user_id, draft_id)
         if method not in FULL_GENERATION_METHODS:

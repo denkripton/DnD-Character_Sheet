@@ -2,6 +2,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 
 from sqlalchemy.exc import SQLAlchemyError
+
 from src.messaging.contract import create_message, messaging_route
 from src.messaging.dispatcher import CommandDispatcher
 from src.messaging.enums import MessageType
@@ -31,6 +32,7 @@ from src.utils.exceptions import (
 
 DraftServiceScope = Callable[[], AbstractAsyncContextManager[CharacterDraftService]]
 BackstoryServiceScope = Callable[[], AbstractAsyncContextManager[BackstoryService]]
+
 
 def build_bot_command_dispatcher(
     producer: MessagePublisher,
@@ -171,7 +173,9 @@ def _stats_payload(result) -> dict:
 
 
 def _generate_payload(result) -> dict:
-    if isinstance(result, dict) and isinstance(result.get("draft"), CharacterDraftReadSchema):
+    if isinstance(result, dict) and isinstance(
+        result.get("draft"), CharacterDraftReadSchema
+    ):
         return {
             "ok": True,
             "draft": result["draft"].model_dump(mode="json"),
@@ -327,18 +331,17 @@ def _handle_draft_save(producer: MessagePublisher, draft_service_scope):
         user_id = _identity(envelope)[AUTH_USER_ID_HEADER]
         payload = envelope.payload if isinstance(envelope.payload, dict) else {}
         draft_id = payload.get("draft_id")
+        backstory = payload.get("backstory")
 
         async def call(service):
             if not draft_id:
-                raise ServiceError(
-                    msg="Invalid character save request.", code=422
-                )
-            return await service.save_character(user_id, draft_id)
+                raise ServiceError(msg="Invalid character save request.", code=422)
+            if backstory is not None and not isinstance(backstory, str):
+                raise ServiceError(msg="Invalid character save request.", code=422)
+            return await service.save_character(user_id, draft_id, backstory)
 
         result = await _draft_call(draft_service_scope, call, _saved_payload)
-        await _publish_response(
-            producer, MessageType.CHARACTER_SAVED, envelope, result
-        )
+        await _publish_response(producer, MessageType.CHARACTER_SAVED, envelope, result)
 
     return handle
 
@@ -377,9 +380,7 @@ def _handle_draft_delete(producer: MessagePublisher, draft_service_scope):
 
         async def call(service):
             if not draft_id:
-                raise ServiceError(
-                    msg="Invalid character draft request.", code=422
-                )
+                raise ServiceError(msg="Invalid character draft request.", code=422)
             await service.delete_draft(user_id, draft_id)
 
         result = await _draft_call(draft_service_scope, call)
@@ -400,16 +401,12 @@ def _handle_draft_stats(producer: MessagePublisher, draft_service_scope):
 
         async def call(service):
             if not draft_id:
-                raise ServiceError(
-                    msg="Invalid character stats request.", code=422
-                )
+                raise ServiceError(msg="Invalid character stats request.", code=422)
             if method is not None:
                 return await service.generate_stats(user_id, draft_id, method)
             if values is not None:
                 return await service.set_stats(user_id, draft_id, values)
-            raise ServiceError(
-                msg="Invalid character stats request.", code=422
-            )
+            raise ServiceError(msg="Invalid character stats request.", code=422)
 
         result = await _draft_call(draft_service_scope, call, _stats_payload)
         await _publish_response(
@@ -424,35 +421,28 @@ def _handle_backstory_generate(producer: MessagePublisher, backstory_service_sco
         user_id = _identity(envelope)[AUTH_USER_ID_HEADER]
         payload = envelope.payload if isinstance(envelope.payload, dict) else {}
         character_id = payload.get("character_id")
+        draft_id = payload.get("draft_id")
         prompt = payload.get("prompt")
         model = payload.get("model")
         provider = payload.get("provider")
 
         async def call(service):
-            if not character_id:
-                raise ServiceError(
-                    msg="Invalid backstory request.", code=422
-                )
+            if not character_id and not draft_id:
+                raise ServiceError(msg="Invalid backstory request.", code=422)
             if prompt is not None and (
                 not isinstance(prompt, str) or len(prompt) > 1000
             ):
-                raise ServiceError(
-                    msg="Invalid backstory request.", code=422
-                )
+                raise ServiceError(msg="Invalid backstory request.", code=422)
             if model is not None and not isinstance(model, str):
-                raise ServiceError(
-                    msg="Invalid backstory request.", code=422
-                )
+                raise ServiceError(msg="Invalid backstory request.", code=422)
             if provider is not None and not isinstance(provider, str):
-                raise ServiceError(
-                    msg="Invalid backstory request.", code=422
+                raise ServiceError(msg="Invalid backstory request.", code=422)
+            if draft_id:
+                return await service.preview_draft_backstory(
+                    user_id, draft_id, model=model, provider=provider, prompt=prompt
                 )
             return await service.preview_backstory(
-                user_id,
-                character_id,
-                model=model,
-                provider=provider,
-                prompt=prompt,
+                user_id, character_id, model=model, provider=provider, prompt=prompt
             )
 
         result = await _backstory_call(
@@ -477,13 +467,9 @@ def _handle_backstory_save(producer: MessagePublisher, backstory_service_scope):
 
         async def call(service):
             if not character_id or not isinstance(backstory, str):
-                raise ServiceError(
-                    msg="Backstory text is required.", code=422
-                )
+                raise ServiceError(msg="Backstory text is required.", code=422)
             if not backstory.strip():
-                raise ServiceError(
-                    msg="Backstory text is required.", code=422
-                )
+                raise ServiceError(msg="Backstory text is required.", code=422)
             if len(backstory) > 10000:
                 raise ServiceError(
                     msg="Backstory must be no more than 10000 characters.",

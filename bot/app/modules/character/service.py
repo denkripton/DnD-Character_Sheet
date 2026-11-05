@@ -37,9 +37,7 @@ class CharacterCreationService:
         )
         return self._extract_draft(payload)
 
-    async def generate_value(
-        self, auth: dict, draft_id: str, parameter: str
-    ) -> dict:
+    async def generate_value(self, auth: dict, draft_id: str, parameter: str) -> dict:
         payload = await self._request(
             MessageType.CHARACTER_UPDATE_PARAMETER,
             {"draft_id": draft_id, "parameter": parameter, "generate": True},
@@ -47,9 +45,7 @@ class CharacterCreationService:
         )
         return self._extract_draft(payload)
 
-    async def generate_character(
-        self, auth: dict, draft_id: str, method: str
-    ) -> dict:
+    async def generate_character(self, auth: dict, draft_id: str, method: str) -> dict:
         payload = await self._request(
             MessageType.CHARACTER_GENERATE,
             {"draft_id": draft_id, "method": method},
@@ -62,9 +58,7 @@ class CharacterCreationService:
             "modifiers": payload.get("modifiers"),
         }
 
-    async def generate_stats(
-        self, auth: dict, draft_id: str, method: str
-    ) -> dict:
+    async def generate_stats(self, auth: dict, draft_id: str, method: str) -> dict:
         payload = await self._request(
             MessageType.CHARACTER_STATS,
             {"draft_id": draft_id, "method": method},
@@ -81,13 +75,18 @@ class CharacterCreationService:
         return self._extract_stats(payload)
 
     async def cancel(self, auth: dict, draft_id: str) -> None:
-        await self._request(
-            MessageType.CHARACTER_DELETE, {"draft_id": draft_id}, auth
-        )
+        await self._request(MessageType.CHARACTER_DELETE, {"draft_id": draft_id}, auth)
 
-    async def save_character(self, auth: dict, draft_id: str) -> dict:
+    async def save_character(
+        self, auth: dict, draft_id: str, backstory: str | None = None
+    ) -> dict:
+        request = {"draft_id": draft_id}
+        if backstory is not None:
+            request["backstory"] = backstory
         payload = await self._request(
-            MessageType.CHARACTER_SAVE, {"draft_id": draft_id}, auth
+            MessageType.CHARACTER_SAVE,
+            request,
+            auth,
         )
         character_id = payload.get("character_id")
         character = payload.get("character")
@@ -98,12 +97,15 @@ class CharacterCreationService:
     async def generate_backstory(
         self,
         auth: dict,
-        character_id: str,
+        character_id: str | None = None,
         prompt: str | None = None,
         model: str | None = None,
         provider: str | None = None,
+        draft_id: str | None = None,
     ) -> str:
         request = {"character_id": character_id, "prompt": prompt}
+        if draft_id is not None:
+            request["draft_id"] = draft_id
         if model is not None:
             request["model"] = model
         if provider is not None:

@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+from uuid import UUID
+
 from src.config import settings
+from src.databases.unit_of_work import UnitOfWork
 from src.infrastructure.redis import cache
 from src.modules.ai import AIService
 from src.modules.character.backstory.prompt import build_backstory_prompt
@@ -9,6 +13,7 @@ from src.modules.character.backstory.schemas import (
 from src.modules.character.base.enums.generation_limits import GenerationLimits
 from src.modules.character.repositories import (
     BackstoryRepository,
+    CharacterDraftRepository,
     CombatRepository,
     FeatureRepository,
     PersonalityRepository,
@@ -17,10 +22,12 @@ from src.modules.character.repositories import (
     SkillRepository,
     StatsRepository,
 )
-from src.modules.character.utils.ownership import CharacterOwnershipGuard
+from src.modules.character.utils.ownership import (
+    CharacterOwnershipGuard,
+    coerce_identifier,
+)
 from src.utils.exceptions import RateLimitExceeded, ServiceError
 from src.utils.interfaces.rate_limiter import RateLimiter
-from src.databases.unit_of_work import UnitOfWork
 
 
 class BackstoryService:
@@ -38,6 +45,7 @@ class BackstoryService:
         saving_throws_repository: SavingThrowsRepository,
         unit_of_work: UnitOfWork,
         rate_limiter: RateLimiter,
+        draft_repository: CharacterDraftRepository | None = None,
     ):
         self.ownership = ownership_guard
         self.repo = backstory_repository
@@ -51,6 +59,7 @@ class BackstoryService:
         self.saving_throws_repo = saving_throws_repository
         self.uow = unit_of_work
         self.rate_limiter = rate_limiter
+        self.draft_repo = draft_repository
 
     async def _upsert(self, character_id, data: dict):
         obj = await self.repo.get_one(character_id=character_id)
@@ -76,15 +85,11 @@ class BackstoryService:
         if combat is not None:
             context["combat"] = combat
 
-        personality = await self.personality_repo.get_one(
-            character_id=character_id
-        )
+        personality = await self.personality_repo.get_one(character_id=character_id)
         if personality is not None:
             context["personality"] = personality
 
-        saving_throws = await self.saving_throws_repo.get_one(
-            character_id=character_id
-        )
+        saving_throws = await self.saving_throws_repo.get_one(character_id=character_id)
         if saving_throws is not None:
             context["saving_throws"] = saving_throws
 
@@ -96,9 +101,7 @@ class BackstoryService:
         if skills:
             context["skills"] = skills
 
-        proficiencies = await self.proficiency_repo.get_many(
-            character_id=character_id
-        )
+        proficiencies = await self.proficiency_repo.get_many(character_id=character_id)
         if proficiencies:
             context["proficiencies"] = proficiencies
 
@@ -141,15 +144,15 @@ class BackstoryService:
 
         backstory = await self.repo.get_one(character_id=character_id)
         result = (
-            BackstoryReadSchema.model_validate(backstory) if backstory is not None else None
+            BackstoryReadSchema.model_validate(backstory)
+            if backstory is not None
+            else None
         )
         if result is not None:
             await cache.set(key, result.model_dump(mode="json"))
         return result
 
-    async def set_backstory(
-        self, user_id, character_id, data: BackstoryCreateSchema
-    ):
+    async def set_backstory(self, user_id, character_id, data: BackstoryCreateSchema):
         await self.ownership.get_owned(user_id, character_id)
         return await self._upsert(
             character_id=character_id,
@@ -171,6 +174,51 @@ class BackstoryService:
         self._validate_text(text)
         return text
 
+    async def preview_draft_backstory(
+        self,
+        user_id,
+        draft_id,
+        model: str | None = None,
+        provider: str | None = None,
+        prompt: str | None = None,
+    ) -> str:
+        if self.draft_repo is None:
+            raise ServiceError(code=422, msg="Character draft not found.")
+        try:
+            identifier = UUID(str(draft_id))
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise ServiceError(code=422, msg="Character draft not found.") from exc
+        draft = await self.draft_repo.get_owned_for_update(
+            identifier, coerce_identifier(user_id)
+        )
+        if draft is None:
+            raise ServiceError(code=422, msg="Character draft not found.")
+        data = draft.data or {}
+        character_id = draft.target_character_id
+        context = await self._context(character_id) if character_id else {}
+        character = SimpleNamespace(
+            **{
+                field: data.get(field)
+                for field in (
+                    "name",
+                    "kind",
+                    "spec_class",
+                    "background",
+                    "alignment",
+                    "level",
+                )
+            }
+        )
+        await self._enforce_generation_limit(user_id)
+        prompt_text = build_backstory_prompt(character, context)
+        if prompt:
+            prompt_text = (
+                f"{prompt_text}\nAdditional instructions from the player:\n{prompt}"
+            )
+        text = await self.ai.generate(prompt_text, model=model, provider=provider)
+        self._validate_text(text)
+        return text
+
     async def generate_backstory(
         self,
         user_id,
@@ -182,6 +230,4 @@ class BackstoryService:
         text = await self.preview_backstory(
             user_id, character_id, model=model, provider=provider, prompt=prompt
         )
-        return await self._upsert(
-            character_id=character_id, data={"backstory": text}
-        )
+        return await self._upsert(character_id=character_id, data={"backstory": text})
