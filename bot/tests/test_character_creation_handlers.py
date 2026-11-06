@@ -1305,7 +1305,7 @@ def test_summary_backstory_button_keeps_character_draft_unsaved():
     assert service.saved == []
 
 
-def test_save_character_button_transitions_to_backstory_hub():
+def test_save_character_button_returns_without_backstory_navigation():
     service, state = _to_summary()
 
     callback = _callback("cc:save")
@@ -1317,14 +1317,7 @@ def test_save_character_button_transitions_to_backstory_hub():
     assert state.data["auth"] == AUTH
     assert "draft_id" not in state.data
     assert _last_answer(callback.message) == CHARACTER_SAVED_TEXT
-    keyboard = callback.message.answer.call_args.kwargs["reply_markup"]
-    callback_data = [
-        button.callback_data
-        for row in keyboard.inline_keyboard
-        for button in row
-    ]
-    assert "bs:start" in callback_data
-    assert "bs:close" in callback_data
+    assert "reply_markup" not in callback.message.answer.call_args.kwargs
 
 
 def test_generated_draft_can_be_saved_without_editing():

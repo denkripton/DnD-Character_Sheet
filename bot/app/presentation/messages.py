@@ -63,8 +63,7 @@ CHARACTER_GENERATION_RESULT_TEXT = (
 )
 
 CHARACTER_SAVED_TEXT = (
-    "Character saved!\n"
-    "Generate an AI backstory with the buttons below, or tap Done."
+    "Character saved!"
 )
 BACKSTORY_START_TEXT = (
     "Optional: tell me what the backstory should focus on.\n"

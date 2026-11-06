@@ -16,12 +16,6 @@ CALLBACK_MODEL = f"{CALLBACK_PREFIX}:model"
 def backstory_hub_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="✨ Generate backstory",
-                    callback_data=CALLBACK_START,
-                )
-            ],
             [InlineKeyboardButton(text="✅ Done", callback_data=CALLBACK_CLOSE)],
         ]
     )

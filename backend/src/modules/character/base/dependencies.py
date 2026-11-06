@@ -1,3 +1,6 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import Depends
 
 from src.dependencies import get_rate_limiter, get_unit_of_work
@@ -18,6 +21,7 @@ from src.modules.character.repositories import (
 )
 from src.utils.interfaces.rate_limiter import RateLimiter
 from src.databases.unit_of_work import UnitOfWork
+from src.databases.sql import AsyncSessionLocal
 
 
 def get_character_service(
@@ -38,3 +42,19 @@ def get_character_service(
         unit_of_work=uow,
         rate_limiter=rate_limiter,
     )
+
+
+@asynccontextmanager
+async def character_service_scope() -> AsyncIterator[CharacterService]:
+    async with AsyncSessionLocal() as session:
+        characters = CharacterRepository(session)
+        users = UserRepository(session)
+        yield CharacterService(
+            character_repository=characters,
+            user_repository=users,
+            ownership_guard=CharacterOwnershipGuard(characters, users),
+            combat_repository=CombatRepository(session),
+            stats_repository=StatsRepository(session),
+            unit_of_work=UnitOfWork(session),
+            rate_limiter=get_rate_limiter(),
+        )

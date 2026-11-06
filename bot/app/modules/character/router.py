@@ -3,7 +3,6 @@ from aiogram.filters import Command, StateFilter
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
 from app.modules.backstory.keyboards import (
-    backstory_hub_keyboard,
     backstory_prompt_keyboard,
 )
 from app.modules.backstory.states import BackstoryStates
@@ -501,9 +500,7 @@ async def _save_character(
     )
     await state.set_state(BackstoryStates.character_saved)
     await callback.answer()
-    await callback.message.answer(
-        CHARACTER_SAVED_TEXT, reply_markup=backstory_hub_keyboard()
-    )
+    await callback.message.answer(CHARACTER_SAVED_TEXT)
 
 
 async def _start_backstory(callback: CallbackQuery, state) -> None:

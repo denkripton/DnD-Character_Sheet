@@ -5,6 +5,7 @@ class MessageType(str, Enum):
     CHARACTER_CREATE = "character.create.command"
     CHARACTER_UPDATE = "character.update.command"
     CHARACTER_GET = "character.get.command"
+    CHARACTER_LIST = "character.list.command"
     CHARACTER_GENERATE = "character.generate.command"
     CHARACTER_GENERATE_BACKSTORY = "character.generate_backstory.command"
     CHARACTER_SAVE_BACKSTORY = "character.save_backstory.command"

@@ -29,6 +29,7 @@ from app.modules.character.service import (
     CharacterCreationService,
 )
 from app.modules.character.states import CharacterCreationStates
+from app.modules.start.keyboards import main_menu_keyboard
 from app.presentation.messages import (
     BACKSTORY_CLOSED_TEXT,
     BACKSTORY_DISCARDED_TEXT,
@@ -178,14 +179,18 @@ async def handle_hub_hint(message: Message, state) -> None:
 
 
 async def handle_backstory_command(message: Message, state) -> None:
-    if await _context(state) is None:
-        await message.answer(BACKSTORY_NOT_STARTED_TEXT)
+    current = await state.get_state()
+    if current in (
+        CharacterCreationStates.summary.state,
+        CharacterCreationStates.generation_result.state,
+    ):
+        await state.set_state(BackstoryStates.prompt)
+        await message.answer(BACKSTORY_START_TEXT, reply_markup=backstory_prompt_keyboard())
         return
-    if await state.get_state() != BackstoryStates.character_saved.state:
-        await message.answer(BACKSTORY_HUB_HINT_TEXT)
-        return
-    await state.set_state(BackstoryStates.prompt)
-    await message.answer(BACKSTORY_START_TEXT, reply_markup=backstory_prompt_keyboard())
+    await message.answer(
+        "Backstory generation is available from the final character preview. "
+        "Start or edit a character to continue."
+    )
 
 
 async def handle_review_hint(message: Message, state) -> None:
@@ -282,13 +287,13 @@ async def _accept(
     if data.get("draft_id"):
         await callback.answer()
         await callback.message.answer(
-            CHARACTER_SAVED_TEXT, reply_markup=backstory_hub_keyboard()
+            CHARACTER_SAVED_TEXT, reply_markup=main_menu_keyboard()
         )
         return
     await _reset_to_hub(state)
     await callback.answer()
     await callback.message.answer(
-        BACKSTORY_SAVED_TEXT, reply_markup=backstory_hub_keyboard()
+        BACKSTORY_SAVED_TEXT, reply_markup=main_menu_keyboard()
     )
 
 

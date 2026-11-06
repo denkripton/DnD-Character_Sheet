@@ -20,6 +20,8 @@ from src.modules.character.draft import (
     CharacterDraftService,
     character_draft_service_scope,
 )
+from src.modules.character.base.dependencies import character_service_scope
+from src.modules.character.base.service import CharacterService
 from src.utils.exceptions import (
     AIProviderAuthError,
     AIProviderError,
@@ -32,6 +34,7 @@ from src.utils.exceptions import (
 
 DraftServiceScope = Callable[[], AbstractAsyncContextManager[CharacterDraftService]]
 BackstoryServiceScope = Callable[[], AbstractAsyncContextManager[BackstoryService]]
+CharacterServiceScope = Callable[[], AbstractAsyncContextManager[CharacterService]]
 
 
 def build_bot_command_dispatcher(
@@ -45,7 +48,16 @@ def build_bot_command_dispatcher(
         draft_service_scope = character_draft_service_scope
     if backstory_service_scope is None:
         backstory_service_scope = character_backstory_service_scope
+    character_service_scope_value = character_service_scope
     dispatcher = CommandDispatcher()
+    dispatcher.register(
+        MessageType.CHARACTER_LIST,
+        _require_authenticated(
+            _handle_character_list(producer, character_service_scope_value),
+            secret,
+            max_age_seconds,
+        ),
+    )
     dispatcher.register(
         MessageType.CHARACTER_GENERATE,
         _require_authenticated(
@@ -164,6 +176,34 @@ def _draft_payload(result) -> dict:
     if isinstance(result, CharacterDraftReadSchema):
         return {"ok": True, "draft": result.model_dump(mode="json")}
     return {"ok": True}
+
+
+def _characters_payload(result) -> dict:
+    if isinstance(result, list):
+        return {
+            "ok": True,
+            "characters": [item.model_dump(mode="json") for item in result],
+        }
+    return {"ok": True, "characters": []}
+
+
+def _handle_character_list(producer: MessagePublisher, service_scope):
+    async def handle(envelope: MessageEnvelope) -> None:
+        user_id = _identity(envelope)[AUTH_USER_ID_HEADER]
+
+        async def call(service):
+            return await service.get_all_characters(user_id)
+
+        try:
+            async with service_scope() as service:
+                payload = _characters_payload(await call(service))
+        except ServiceError as exc:
+            payload = {"ok": False, "error": str(exc)}
+        except SQLAlchemyError:
+            payload = {"ok": False, "error": "The request could not be completed. Please try again."}
+        await _publish_response(producer, MessageType.CHARACTER_LIST, envelope, payload)
+
+    return handle
 
 
 def _stats_payload(result) -> dict:

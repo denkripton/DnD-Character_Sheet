@@ -2,6 +2,8 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from aiogram.types import ReplyKeyboardMarkup
+
 from app.modules.backstory.keyboards import (
     backstory_edit_keyboard,
     backstory_hub_keyboard,
@@ -358,7 +360,7 @@ def test_prompt_input_too_long_rejected():
     assert _last_answer(message) == CHARACTER_TOO_LONG_TEXT
 
 
-def test_accept_saves_backstory_and_returns_to_hub():
+def test_accept_saves_backstory_and_returns_to_main_menu():
     state = _review_state("A wandering hero.")
     service = FakeCreationService()
     callback = _callback("bs:accept")
@@ -368,9 +370,7 @@ def test_accept_saves_backstory_and_returns_to_hub():
     assert service.saved_backstories == [("char-1", "A wandering hero.")]
     assert state.state == BackstoryStates.character_saved.state
     assert _last_answer(callback.message) == BACKSTORY_SAVED_TEXT
-    assert _callback_data(_keyboard(callback.message)) == _callback_data(
-        backstory_hub_keyboard()
-    )
+    assert isinstance(_keyboard(callback.message), ReplyKeyboardMarkup)
 
 
 def test_accept_draft_saves_character_and_backstory_together():

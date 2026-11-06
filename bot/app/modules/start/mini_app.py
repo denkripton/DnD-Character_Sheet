@@ -17,7 +17,6 @@ MINI_APP_COMMANDS = (
     ("app", "Open Mini App"),
     ("characters", "My characters"),
     ("create", "Create character"),
-    ("backstory", "Generate backstory"),
     ("help", "Help"),
 )
 
@@ -81,7 +80,7 @@ async def handle_characters(message: Message, config: BotConfig) -> None:
 
 
 async def handle_help(message: Message, config: BotConfig) -> None:
-    text = "Commands: /start, /app, /characters, /create, /backstory."
+    text = "Use the buttons below to create and manage characters."
     if config.MINI_APP_URL:
         text += " Use /app to open the Mini App."
     await message.answer(text)

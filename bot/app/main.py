@@ -9,6 +9,7 @@ from app.config import load_config
 from app.dependencies import build_rabbitmq_client
 from app.infrastructure.logging import configure_logging
 from app.modules.character import CharacterCreationService
+from app.modules.character.management import CharacterManagementService
 from app.modules.start.mini_app import configure_bot_menu
 
 
@@ -31,6 +32,7 @@ async def main() -> None:
     rabbit = build_rabbitmq_client(config)
     dispatcher["rabbit"] = rabbit
     dispatcher["creation_service"] = CharacterCreationService(rabbit)
+    dispatcher["management_service"] = CharacterManagementService(rabbit)
 
     await configure_bot_menu(bot, config)
     await rabbit.start()

@@ -5,6 +5,13 @@ from unittest.mock import AsyncMock
 from app.modules.auth import PROVIDER_TELEGRAM, BotAuthService
 from app.modules.auth.schemas.context import AuthContext
 from app.modules.start.router import build_start_router, handle_start
+from app.modules.start.keyboards import (
+    CREATE_CHARACTER_TEXT,
+    HELP_TEXT,
+    MY_CHARACTERS_TEXT,
+    OPEN_MINI_APP_TEXT,
+    main_menu_keyboard,
+)
 from app.modules.start.service import StartService
 from app.config import BotConfig
 from app.infrastructure.http.exceptions import BackendAuthError
@@ -89,7 +96,7 @@ def test_start_auth_failure_answers_unavailable():
 
 def test_start_router_registers_handler():
     router = build_start_router()
-    assert len(router.message.handlers) == 1
+    assert len(router.message.handlers) == 5
     assert router.name == "start"
 
 
@@ -109,4 +116,15 @@ def test_start_does_not_offer_http_web_app_button():
         )
     )
 
-    assert message.answer.await_args.kwargs["reply_markup"] is None
+    assert message.answer.await_args.kwargs["reply_markup"] == main_menu_keyboard()
+
+
+def test_main_menu_contains_only_primary_navigation_actions():
+    labels = [button.text for row in main_menu_keyboard().keyboard for button in row]
+
+    assert labels == [
+        CREATE_CHARACTER_TEXT,
+        MY_CHARACTERS_TEXT,
+        OPEN_MINI_APP_TEXT,
+        HELP_TEXT,
+    ]

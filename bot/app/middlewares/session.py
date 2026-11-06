@@ -43,12 +43,13 @@ class SessionMiddleware(BaseMiddleware):
             needs_session = (
                 command
                 in {"/create", "/create_character", "/edit_character", "/backstory", "/back", "/cancel"}
+                or (event.text or "") in {"Create Character", "My Characters", "Open Mini App", "Help"}
                 or await state.get_state() is not None
             )
         else:
             needs_session = isinstance(event, CallbackQuery) and (
                 event.data or ""
-            ).startswith(("cc:", "bs:"))
+            ).startswith(("cc:", "bs:", "cm:"))
 
         auth = (await state.get_data()).get("auth")
         if isinstance(auth, dict) and auth.get("provider_user_id") != str(user.id):
