@@ -13,6 +13,12 @@ from app.modules.character.service import (
     BackendUnavailableError,
     CharacterCreationError,
 )
+from app.modules.character.sheet import (
+    SHEET_SECTIONS,
+    sheet_keyboard,
+    sheet_page_count,
+    sheet_text,
+)
 from app.modules.character.states import CharacterCreationStates
 from app.presentation.messages import CHARACTER_UNAVAILABLE_TEXT
 
@@ -26,8 +32,7 @@ class CharacterManagementService:
         try:
             envelope = await self.rabbit.request(
                 MessageType.CHARACTER_LIST, {}, timeout=self.timeout,
-                provider=auth.get("provider"), provider_user_id=auth.get("provider_user_id"),
-                user_id=auth.get("user_id"),
+                provider=auth.get("provider"), provider_user_id=auth.get("provider_user_id"), user_id=auth.get("user_id"),
             )
         except Exception as exc:
             raise BackendUnavailableError(str(exc)) from exc
@@ -35,11 +40,22 @@ class CharacterManagementService:
         if not isinstance(payload, dict) or not payload.get("ok"):
             raise CharacterCreationError((payload or {}).get("error", "Unable to load characters."))
         characters = payload.get("characters", [])
-        if not isinstance(characters, list) or not all(
-            isinstance(character, dict) and character.get("id") for character in characters
-        ):
+        if not isinstance(characters, list) or not all(isinstance(character, dict) and character.get("id") for character in characters):
             raise CharacterCreationError("Unable to load characters.")
         return characters
+
+    async def get(self, auth: dict, character_id: str) -> dict:
+        try:
+            envelope = await self.rabbit.request(
+                MessageType.CHARACTER_GET, {"character_id": character_id}, timeout=self.timeout,
+                provider=auth.get("provider"), provider_user_id=auth.get("provider_user_id"), user_id=auth.get("user_id"),
+            )
+        except Exception as exc:
+            raise BackendUnavailableError(str(exc)) from exc
+        payload = envelope.payload
+        if not isinstance(payload, dict) or not payload.get("ok") or not isinstance(payload.get("character"), dict):
+            raise CharacterCreationError((payload or {}).get("error", "Unable to load character."))
+        return payload["character"]
 
 
 def _list_keyboard(characters: list[dict]) -> InlineKeyboardMarkup:
@@ -69,33 +85,53 @@ async def handle_my_characters(message: Message, state, management_service: Char
     await message.answer("Choose a character:", reply_markup=_list_keyboard(characters))
 
 
-async def handle_management_callback(callback: CallbackQuery, state, creation_service) -> None:
+async def handle_management_callback(callback: CallbackQuery, state, creation_service, management_service) -> None:
     await callback.answer()
     if not callback.message:
         return
     if callback.data == "cm:back":
-        await callback.message.answer("Use the persistent menu below.")
+        await callback.message.edit_text("Use the persistent menu below.")
         return
     if callback.data and callback.data.startswith("cm:view:"):
         character_id = callback.data.removeprefix("cm:view:")
-        characters = (await state.get_data()).get("managed_characters", [])
-        character = next(
-            (item for item in characters if str(item.get("id")) == character_id), None
-        )
-        if character is None:
-            await callback.message.answer("This character is no longer available.")
+        auth = (await state.get_data()).get("auth")
+        if not auth:
+            await callback.answer("Please /start the bot first.", show_alert=True)
             return
-        await callback.message.answer(
-            f"Name: {character.get('name', '-')}\n"
-            f"Race: {character.get('kind', '-')}\n"
-            f"Class: {character.get('spec_class', '-')}\n"
-            f"Level: {character.get('level', '-')}\n\n"
-            "Choose an action:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="✏️ Edit Character", callback_data=f"cm:edit:{character_id}")],
-                [InlineKeyboardButton(text="⬅️ Back", callback_data="cm:back")],
-            ]),
+        try:
+            character = await management_service.get(auth, character_id)
+        except BackendUnavailableError:
+            await callback.message.edit_text(CHARACTER_UNAVAILABLE_TEXT)
+            return
+        except CharacterCreationError as exc:
+            await callback.message.edit_text(str(exc))
+            return
+        await state.update_data(selected_character=character)
+        await callback.message.edit_text(
+            sheet_text(character, "overview"),
+            reply_markup=sheet_keyboard(character_id, "overview", page_count=sheet_page_count(character, "overview")),
         )
+        return
+    if callback.data and callback.data.startswith("cs:"):
+        parts = callback.data.split(":")
+        if len(parts) != 4 or parts[2] not in dict(SHEET_SECTIONS):
+            await callback.answer("This sheet action has expired.", show_alert=True)
+            return
+        character_id, section = parts[1], parts[2]
+        try:
+            page = int(parts[3])
+        except ValueError:
+            await callback.answer("This sheet action has expired.", show_alert=True)
+            return
+        character = (await state.get_data()).get("selected_character")
+        if not isinstance(character, dict) or str(character.get("id")) != character_id:
+            await callback.answer("This character sheet has expired.", show_alert=True)
+            return
+        page_count = sheet_page_count(character, section)
+        if page < 0 or page >= page_count:
+            await callback.answer("This sheet page has expired.", show_alert=True)
+            return
+        await callback.message.edit_text(sheet_text(character, section, page), reply_markup=sheet_keyboard(character_id, section, page, page_count))
         return
     if callback.data and callback.data.startswith("cm:edit:"):
         character_id = callback.data.removeprefix("cm:edit:")
@@ -108,21 +144,14 @@ async def handle_management_callback(callback: CallbackQuery, state, creation_se
         except CharacterCreationError as exc:
             await callback.message.answer(str(exc))
             return
-        draft_data = draft.get("data") or {}
         await state.clear()
-        await state.update_data(
-            auth=auth,
-            draft_id=draft["id"],
-            draft_data=draft_data,
-            target_character_id=draft["target_character_id"],
-        )
+        await state.update_data(auth=auth, draft_id=draft["id"], draft_data=draft.get("data") or {}, target_character_id=draft["target_character_id"])
         await state.set_state(CharacterCreationStates.summary)
-        await callback.message.answer(
-            _summary_text(await state.get_data()), reply_markup=navigation_keyboard()
-        )
+        await callback.message.answer(_summary_text(await state.get_data()), reply_markup=navigation_keyboard())
 
 
 def build_management_router() -> Router:
     router = Router(name="character_management")
     router.callback_query.register(handle_management_callback, F.data.startswith("cm:"))
+    router.callback_query.register(handle_management_callback, F.data.startswith("cs:"))
     return router

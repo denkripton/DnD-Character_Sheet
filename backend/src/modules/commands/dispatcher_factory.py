@@ -25,6 +25,7 @@ from src.modules.character.draft import (
     CharacterDraftService,
     character_draft_service_scope,
 )
+from src.modules.character.utils.compute_mods import compute_modifiers
 from src.utils.exceptions import (
     AIProviderAuthError,
     AIProviderError,
@@ -59,6 +60,14 @@ def build_bot_command_dispatcher(
         MessageType.CHARACTER_LIST,
         _require_authenticated(
             _handle_character_list(producer, character_service_scope_value),
+            secret,
+            max_age_seconds,
+        ),
+    )
+    dispatcher.register(
+        MessageType.CHARACTER_GET,
+        _require_authenticated(
+            _handle_character_get(producer, character_service_scope_value),
             secret,
             max_age_seconds,
         ),
@@ -217,6 +226,86 @@ def _handle_character_list(producer: MessagePublisher, service_scope):
                 "error": "Unable to load characters right now. Please try again later.",
             }
         await _publish_response(producer, MessageType.CHARACTER_LISTED, envelope, payload)
+
+    return handle
+
+
+def _character_sheet_payload(character) -> dict:
+    def dump(value, fields):
+        if value is None:
+            return None
+        return {field: getattr(value, field) for field in fields}
+
+    stats = dump(character.stats, (
+        "strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"
+    )) or {}
+    modifiers = compute_modifiers(stats)
+    proficiency_bonus = getattr(character.combat, "proficiency_bonus", 0) if character.combat else 0
+    skills = []
+    for item in character.skills:
+        modifier = modifiers.get(item.ability, 0)
+        skills.append({
+            "name": item.name,
+            "ability": item.ability,
+            "proficiency": item.proficiency,
+            "modifier": modifier + (proficiency_bonus if item.proficiency else 0),
+        })
+    saving_throws = {}
+    if character.saving_throws:
+        for ability in stats:
+            proficient = getattr(character.saving_throws, ability)
+            saving_throws[ability] = {
+                "proficient": proficient,
+                "modifier": modifiers.get(ability, 0) + (proficiency_bonus if proficient else 0),
+            }
+    return {
+        "ok": True,
+        "character": {
+            "id": str(character.id),
+            "name": character.name,
+            "spec_class": character.spec_class,
+            "kind": character.kind,
+            "alignment": character.alignment,
+            "background": character.background,
+            "experience_points": character.experience_points,
+            "level": character.level,
+            "stats": stats or None,
+            "modifiers": modifiers,
+            "combat": dump(character.combat, (
+                "current_hp", "max_hp", "temp_hp", "armor_class", "initiative", "speed",
+                "proficiency_bonus", "hit_dice_total", "hit_dice_remaining",
+            )),
+            "saving_throws": saving_throws,
+            "skills": skills,
+            "proficiencies": [dump(item, ("category", "name")) for item in character.proficiencies],
+            "features": [dump(item, ("name", "description")) for item in character.features],
+            "personality": dump(character.personality, (
+                "personality_traits", "ideals", "bonds", "flaws"
+            )),
+            "backstory": dump(character.backstory, ("backstory",)),
+        },
+    }
+
+
+def _handle_character_get(producer: MessagePublisher, service_scope):
+    async def handle(envelope: MessageEnvelope) -> None:
+        user_id = _identity(envelope)[AUTH_USER_ID_HEADER]
+        character_id = envelope.payload.get("character_id") if isinstance(envelope.payload, dict) else None
+        try:
+            async with service_scope() as service:
+                character = await service.get_character_sheet(user_id, character_id)
+                if character is None:
+                    raise ServiceError(code=404, msg="Character not found")
+                payload = _character_sheet_payload(character)
+        except ServiceError as exc:
+            payload = {"ok": False, "error": str(exc)}
+        except SQLAlchemyError:
+            logger.exception("character_get_database_failed", user_id=user_id)
+            payload = {"ok": False, "error": "The request could not be completed. Please try again."}
+        except Exception:
+            logger.exception("character_get_failed", user_id=user_id)
+            payload = {"ok": False, "error": "Unable to load the character right now. Please try again later."}
+        await _publish_response(producer, MessageType.CHARACTER_UPDATED, envelope, payload)
 
     return handle
 

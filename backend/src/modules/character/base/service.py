@@ -126,6 +126,14 @@ class CharacterService:
         await cache.set(key, result.model_dump(mode="json"))
         return result
 
+    async def get_character_sheet(self, user_id, character_id):
+        character = await self.character_repo.get_with_sheet(
+            coerce_identifier(character_id), coerce_identifier(user_id)
+        )
+        if character is None:
+            await self.ownership.get_owned(user_id, character_id)
+        return character
+
     async def delete_character(self, user_id, character_id):
         character = await self.ownership.get_owned(user_id, character_id)
 
