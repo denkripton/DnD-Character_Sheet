@@ -34,7 +34,12 @@ class CharacterManagementService:
         payload = envelope.payload
         if not isinstance(payload, dict) or not payload.get("ok"):
             raise CharacterCreationError((payload or {}).get("error", "Unable to load characters."))
-        return payload.get("characters", [])
+        characters = payload.get("characters", [])
+        if not isinstance(characters, list) or not all(
+            isinstance(character, dict) and character.get("id") for character in characters
+        ):
+            raise CharacterCreationError("Unable to load characters.")
+        return characters
 
 
 def _list_keyboard(characters: list[dict]) -> InlineKeyboardMarkup:

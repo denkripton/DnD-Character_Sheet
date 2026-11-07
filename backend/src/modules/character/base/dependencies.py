@@ -47,14 +47,18 @@ def get_character_service(
 @asynccontextmanager
 async def character_service_scope() -> AsyncIterator[CharacterService]:
     async with AsyncSessionLocal() as session:
-        characters = CharacterRepository(session)
-        users = UserRepository(session)
-        yield CharacterService(
-            character_repository=characters,
-            user_repository=users,
-            ownership_guard=CharacterOwnershipGuard(characters, users),
-            combat_repository=CombatRepository(session),
-            stats_repository=StatsRepository(session),
-            unit_of_work=UnitOfWork(session),
-            rate_limiter=get_rate_limiter(),
-        )
+        try:
+            characters = CharacterRepository(session)
+            users = UserRepository(session)
+            yield CharacterService(
+                character_repository=characters,
+                user_repository=users,
+                ownership_guard=CharacterOwnershipGuard(characters, users),
+                combat_repository=CombatRepository(session),
+                stats_repository=StatsRepository(session),
+                unit_of_work=UnitOfWork(session),
+                rate_limiter=get_rate_limiter(),
+            )
+        except Exception:
+            await session.rollback()
+            raise

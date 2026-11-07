@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+
 from app.modules.backstory.keyboards import (
     CALLBACK_ACCEPT,
     CALLBACK_GENERATE,
@@ -18,6 +19,7 @@ from app.modules.character.keyboards import (
     CALLBACK_SAVE,
     CALLBACK_SET,
 )
+from app.modules.character.management import handle_my_characters
 from app.modules.character.router import (
     handle_callback,
     handle_cancel,
@@ -352,3 +354,16 @@ def test_backstory_is_not_automatic_or_available_from_main_menu():
         for button in row
     ]
     assert "Generate Backstory" not in labels
+
+
+def test_my_characters_renders_saved_characters():
+    class ManagementService:
+        async def list(self, auth):
+            assert auth["user_id"] == "user-1"
+            return [{"id": "char-1", "name": "Aria", "kind": "Elf", "spec_class": "Wizard", "level": 1}]
+
+    message = _message("My Characters")
+    asyncio.run(handle_my_characters(message, _state(), ManagementService()))
+
+    assert message.answer.await_args.args[0] == "Choose a character:"
+    assert message.answer.await_args.kwargs["reply_markup"].inline_keyboard[0][0].text == "Aria"

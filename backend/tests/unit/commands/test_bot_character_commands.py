@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy.exc import OperationalError
+
 from src.config import settings
 from src.messaging.contract import create_message
 from src.messaging.enums import MessageType
@@ -14,6 +15,7 @@ from src.messaging.enums.constants import (
     AUTH_USER_ID_HEADER,
 )
 from src.modules.character.base.enums.generation_limits import GenerationLimits
+from src.modules.character.base.schemas import CharacterReadSchema
 from src.modules.character.draft import CharacterDraftService
 from src.modules.character.models import Character, CharacterDraft, Combat, Stat
 from src.modules.character.utils.random_character import KINDS, NAMES, SPEC_CLASSES
@@ -141,6 +143,60 @@ def test_character_create_command_creates_draft():
     assert event.payload["draft"]["data"] == {}
     assert len(draft_repo.rows) == 1
     assert draft_repo.rows[0].owner_id == "user-1"
+
+
+def test_character_list_command_returns_owned_characters():
+    class CharacterServiceStub:
+        def __init__(self):
+            self.user_id = None
+
+        async def get_all_characters(self, user_id):
+            self.user_id = user_id
+            return [
+                CharacterReadSchema(
+                    id=uuid4(), name="Aria", kind="Elf", spec_class="Wizard"
+                )
+            ]
+
+    service = CharacterServiceStub()
+
+    @asynccontextmanager
+    async def scope():
+        yield service
+
+    producer = AsyncMock()
+    dispatcher = build_bot_command_dispatcher(
+        producer, character_service_scope=scope
+    )
+
+    asyncio.run(dispatcher.handle(_command(MessageType.CHARACTER_LIST)))
+
+    event, routing_key = _published(producer)
+    assert event.type == MessageType.CHARACTER_LISTED.value
+    assert routing_key == "events.character.listed"
+    assert event.payload["ok"] is True
+    assert event.payload["characters"][0]["name"] == "Aria"
+    assert service.user_id == "user-1"
+
+
+def test_character_list_command_returns_empty_list():
+    class CharacterServiceStub:
+        async def get_all_characters(self, user_id):
+            return []
+
+    @asynccontextmanager
+    async def scope():
+        yield CharacterServiceStub()
+
+    producer = AsyncMock()
+    dispatcher = build_bot_command_dispatcher(
+        producer, character_service_scope=scope
+    )
+
+    asyncio.run(dispatcher.handle(_command(MessageType.CHARACTER_LIST)))
+
+    event, _ = _published(producer)
+    assert event.payload == {"ok": True, "characters": []}
 
 
 def test_character_create_requires_identity_headers():

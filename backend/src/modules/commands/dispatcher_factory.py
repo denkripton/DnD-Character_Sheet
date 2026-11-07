@@ -1,6 +1,7 @@
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 
+import structlog
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.messaging.contract import create_message, messaging_route
@@ -15,13 +16,15 @@ from src.modules.ai.enums import AIErrorMessage
 from src.modules.character.backstory import character_backstory_service_scope
 from src.modules.character.backstory.schemas import BackstoryCreateSchema
 from src.modules.character.backstory.service import BackstoryService
+from src.modules.character.base.dependencies import (
+    character_service_scope as default_character_service_scope,
+)
+from src.modules.character.base.service import CharacterService
 from src.modules.character.draft import (
     CharacterDraftReadSchema,
     CharacterDraftService,
     character_draft_service_scope,
 )
-from src.modules.character.base.dependencies import character_service_scope
-from src.modules.character.base.service import CharacterService
 from src.utils.exceptions import (
     AIProviderAuthError,
     AIProviderError,
@@ -35,6 +38,7 @@ from src.utils.exceptions import (
 DraftServiceScope = Callable[[], AbstractAsyncContextManager[CharacterDraftService]]
 BackstoryServiceScope = Callable[[], AbstractAsyncContextManager[BackstoryService]]
 CharacterServiceScope = Callable[[], AbstractAsyncContextManager[CharacterService]]
+logger = structlog.get_logger(__name__)
 
 
 def build_bot_command_dispatcher(
@@ -43,12 +47,13 @@ def build_bot_command_dispatcher(
     max_age_seconds: int = 300,
     draft_service_scope: DraftServiceScope | None = None,
     backstory_service_scope: BackstoryServiceScope | None = None,
+    character_service_scope: CharacterServiceScope | None = None,
 ) -> CommandDispatcher:
     if draft_service_scope is None:
         draft_service_scope = character_draft_service_scope
     if backstory_service_scope is None:
         backstory_service_scope = character_backstory_service_scope
-    character_service_scope_value = character_service_scope
+    character_service_scope_value = character_service_scope or default_character_service_scope
     dispatcher = CommandDispatcher()
     dispatcher.register(
         MessageType.CHARACTER_LIST,
@@ -200,8 +205,18 @@ def _handle_character_list(producer: MessagePublisher, service_scope):
         except ServiceError as exc:
             payload = {"ok": False, "error": str(exc)}
         except SQLAlchemyError:
+            logger.exception(
+                "character_list_database_failed",
+                user_id=user_id,
+            )
             payload = {"ok": False, "error": "The request could not be completed. Please try again."}
-        await _publish_response(producer, MessageType.CHARACTER_LIST, envelope, payload)
+        except Exception:
+            logger.exception("character_list_failed", user_id=user_id)
+            payload = {
+                "ok": False,
+                "error": "Unable to load characters right now. Please try again later.",
+            }
+        await _publish_response(producer, MessageType.CHARACTER_LISTED, envelope, payload)
 
     return handle
 

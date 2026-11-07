@@ -16,6 +16,7 @@ class MessageType(str, Enum):
     AI_CATALOG = "ai.catalog.command"
 
     CHARACTER_CREATED = "character.created.event"
+    CHARACTER_LISTED = "character.listed.event"
     CHARACTER_UPDATED = "character.updated.event"
     CHARACTER_GENERATED = "character.generated.event"
     CHARACTER_DELETED = "character.deleted.event"
