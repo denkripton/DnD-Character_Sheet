@@ -2,8 +2,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
+import structlog
 from fastapi import Depends
-
 from src.databases.sql import AsyncSessionLocal
 from src.databases.unit_of_work import UnitOfWork
 from src.dependencies import get_rate_limiter, get_unit_of_work
@@ -27,6 +27,9 @@ from src.utils.interfaces.rate_limiter import RateLimiter
 
 if TYPE_CHECKING:
     from src.modules.character.draft.service import CharacterDraftService
+
+
+logger = structlog.get_logger(__name__)
 
 
 def get_character_draft_service(
@@ -58,13 +61,18 @@ async def character_draft_service_scope() -> AsyncIterator["CharacterDraftServic
     from src.modules.character.draft.service import CharacterDraftService
 
     async with AsyncSessionLocal() as session:
-        yield CharacterDraftService(
-            draft_repository=CharacterDraftRepository(session),
-            character_repository=CharacterRepository(session),
-            stats_repository=StatsRepository(session),
-            user_repository=UserRepository(session),
-            unit_of_work=UnitOfWork(session),
-            rate_limiter=get_rate_limiter(),
-            combat_repository=CombatRepository(session),
-            backstory_repository=BackstoryRepository(session),
-        )
+        try:
+            yield CharacterDraftService(
+                draft_repository=CharacterDraftRepository(session),
+                character_repository=CharacterRepository(session),
+                stats_repository=StatsRepository(session),
+                user_repository=UserRepository(session),
+                unit_of_work=UnitOfWork(session),
+                rate_limiter=get_rate_limiter(),
+                combat_repository=CombatRepository(session),
+                backstory_repository=BackstoryRepository(session),
+            )
+        except Exception:
+            await session.rollback()
+            logger.exception("character_draft_transaction_failed")
+            raise

@@ -1,7 +1,7 @@
 from uuid import UUID
 
+import structlog
 from pydantic import ValidationError
-
 from src.config import settings
 from src.databases.unit_of_work import UnitOfWork
 from src.infrastructure.redis import cache
@@ -46,6 +46,7 @@ PARAMETER_LABELS = {
 }
 
 FULL_GENERATION_METHODS = ("random", "standard", "point_buy")
+logger = structlog.get_logger(__name__)
 
 DAILY_LIMIT_COUNTED_OPERATIONS = frozenset({"generate_character", "save_character"})
 
@@ -387,7 +388,24 @@ class CharacterDraftService:
                 saved_backstory.backstory = backstory
         draft.saved_character_id = character.id
         draft.data = {}
-        await self.uow.commit()
+        try:
+            await self.uow.commit()
+        except Exception:
+            try:
+                await self.uow.rollback()
+            except Exception:
+                logger.exception(
+                    "character_save_rollback_failed",
+                    user_id=str(user_id),
+                    draft_id=str(identifier),
+                )
+            logger.exception(
+                "character_save_commit_failed",
+                user_id=str(user_id),
+                draft_id=str(identifier),
+                character_id=str(character.id),
+            )
+            raise
         await self.uow.refresh(character)
 
         await cache.delete_pattern(f"characters:list:{user_id}*")

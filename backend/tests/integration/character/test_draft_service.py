@@ -2,6 +2,7 @@ import asyncio
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 from src.modules.character.draft.service import CharacterDraftService
 from src.modules.character.models import Character, CharacterDraft, Combat, Stat
 from src.modules.character.utils.random_character import KINDS, NAMES, SPEC_CLASSES
@@ -12,6 +13,22 @@ from tests.utils import FakeRepo, FakeUnitOfWork, StubRateLimiter
 class DummyUser:
     def __init__(self, id):
         self.id = id
+
+
+class FailingCommitUnitOfWork:
+    def __init__(self):
+        self.commit_calls = 0
+        self.rollback_calls = 0
+
+    async def commit(self):
+        self.commit_calls += 1
+        raise OperationalError("INSERT", {}, Exception("database is down"))
+
+    async def rollback(self):
+        self.rollback_calls += 1
+
+    async def refresh(self, obj):
+        return obj
 
 
 def _service(rate_limiter=None):
@@ -722,6 +739,29 @@ def test_save_character_requires_required_fields():
         assert "required" in exc_info.value.message
         assert service.character_repo.rows == []
         assert len(draft_repo.rows) == 1
+
+    asyncio.run(flow())
+
+
+def test_save_character_rolls_back_when_commit_fails():
+    service, _, _ = _service()
+    uow = FailingCommitUnitOfWork()
+
+    async def flow():
+        draft = await service.create_draft("user-1")
+        for parameter, value in [
+            ("name", "Aria"),
+            ("kind", "Elf"),
+            ("spec_class", "Wizard"),
+        ]:
+            await service.update_parameter("user-1", draft.id, parameter, value)
+
+        service.uow = uow
+        with pytest.raises(OperationalError):
+            await service.save_character("user-1", draft.id)
+
+        assert uow.commit_calls == 1
+        assert uow.rollback_calls == 1
 
     asyncio.run(flow())
 

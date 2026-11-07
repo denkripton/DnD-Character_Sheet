@@ -165,6 +165,7 @@ def _environment(
         stats_repo=stats_repo,
         backstory_repo=backstory_repo,
         ai=ai,
+        draft_uow=draft_uow,
     )
 
 
@@ -411,7 +412,8 @@ def test_character_save_rate_limited():
 
 
 def test_character_save_persistence_failure_returns_error():
-    env = _environment(draft_uow=FlakyUnitOfWork(fail_after=5))
+    uow = FlakyUnitOfWork(fail_after=5)
+    env = _environment(draft_uow=uow)
     draft_id = _create_draft(env)
     for parameter, value in [
         ("name", "Aria"),
@@ -431,6 +433,7 @@ def test_character_save_persistence_failure_returns_error():
 
     assert event.payload["ok"] is False
     assert "could not be completed" in event.payload["error"]
+    assert uow.rollback_calls == 1
 
 
 def test_backstory_generate_returns_preview_without_persisting():
