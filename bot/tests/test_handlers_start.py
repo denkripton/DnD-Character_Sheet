@@ -2,9 +2,10 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from app.config import BotConfig
+from app.infrastructure.http.exceptions import BackendAuthError
 from app.modules.auth import PROVIDER_TELEGRAM, BotAuthService
 from app.modules.auth.schemas.context import AuthContext
-from app.modules.start.router import build_start_router, handle_start
 from app.modules.start.keyboards import (
     CREATE_CHARACTER_TEXT,
     HELP_TEXT,
@@ -12,9 +13,8 @@ from app.modules.start.keyboards import (
     OPEN_MINI_APP_TEXT,
     main_menu_keyboard,
 )
+from app.modules.start.router import build_start_router, handle_start
 from app.modules.start.service import StartService
-from app.config import BotConfig
-from app.infrastructure.http.exceptions import BackendAuthError
 from app.presentation.messages import AUTH_UNAVAILABLE_TEXT
 
 
@@ -128,3 +128,24 @@ def test_main_menu_contains_only_primary_navigation_actions():
         OPEN_MINI_APP_TEXT,
         HELP_TEXT,
     ]
+
+
+def test_start_uses_mini_app_navigation_for_https_configuration():
+    message = _message()
+    message.chat.type = "private"
+
+    asyncio.run(
+        handle_start(
+            message,
+            StartService(),
+            _auth_service(),
+            _state(),
+            BotConfig(
+                BOT_TOKEN="12345:test-token", MINI_APP_URL="https://app.example.com"
+            ),
+        )
+    )
+
+    markup = message.answer.await_args.kwargs["reply_markup"]
+    assert markup.keyboard[0][1].web_app.url == "https://app.example.com/characters"
+    assert markup.keyboard[1][0].web_app.url == "https://app.example.com"

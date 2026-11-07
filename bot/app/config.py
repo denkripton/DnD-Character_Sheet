@@ -41,6 +41,7 @@ class BotConfig(BaseSettings):
     def validate_mini_app_url(cls, value: str | None) -> str | None:
         if value is None or not value.strip():
             return None
+        value = value.strip()
         parsed = urlparse(value)
         if parsed.scheme not in {"https", "http"} or not parsed.netloc:
             raise ValueError("MINI_APP_URL must be an absolute HTTP(S) URL")

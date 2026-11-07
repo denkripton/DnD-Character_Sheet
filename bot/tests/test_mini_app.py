@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock
 
 from aiogram.enums import ChatType
 from aiogram.types import MenuButtonCommands
-
 from app.config import BotConfig
+from app.modules.start.keyboards import main_menu_keyboard
 from app.modules.start.mini_app import (
     MINI_APP_COMMANDS,
     configure_bot_menu,
@@ -26,6 +26,24 @@ def test_menu_configuration_sets_commands_and_web_app_button():
         command for command, _ in MINI_APP_COMMANDS
     ]
     assert bot.set_chat_menu_button.await_args.kwargs["menu_button"].web_app.url == config.MINI_APP_URL
+
+
+def test_main_menu_uses_mini_app_routes_for_https_configuration():
+    markup = main_menu_keyboard(
+        BotConfig(BOT_TOKEN="12345:test-token", MINI_APP_URL="https://app.example.com/")
+    )
+
+    assert markup.keyboard[0][1].web_app.url == "https://app.example.com/characters"
+    assert markup.keyboard[1][0].web_app.url == "https://app.example.com/"
+
+
+def test_main_menu_does_not_create_web_app_buttons_for_localhost():
+    markup = main_menu_keyboard(
+        BotConfig(BOT_TOKEN="12345:test-token", MINI_APP_URL="http://localhost:5173")
+    )
+
+    assert markup.keyboard[0][1].web_app is None
+    assert markup.keyboard[1][0].web_app is None
 
 
 def test_menu_configuration_without_url_skips_web_app_menu_button():

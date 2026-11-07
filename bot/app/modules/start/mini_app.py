@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 from aiogram import Router
 from aiogram.enums import ChatType
 from aiogram.filters import Command
@@ -29,6 +31,13 @@ def build_mini_app_url(config: BotConfig, path: str = "") -> str | None:
     return f"{config.MINI_APP_URL.rstrip('/')}/{path.lstrip('/')}"
 
 
+def is_telegram_web_app_url(url: str | None) -> bool:
+    if not url:
+        return False
+    parsed = urlparse(url)
+    return parsed.scheme.lower() == "https" and bool(parsed.netloc)
+
+
 async def configure_bot_menu(bot, config: BotConfig) -> None:
     from aiogram.types import BotCommand
 
@@ -38,7 +47,7 @@ async def configure_bot_menu(bot, config: BotConfig) -> None:
             for name, description in MINI_APP_COMMANDS
         ]
     )
-    if config.MINI_APP_URL and config.MINI_APP_URL.startswith("https://"):
+    if is_telegram_web_app_url(config.MINI_APP_URL):
         await bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(
                 text="Open app", web_app=WebAppInfo(url=config.MINI_APP_URL)
@@ -56,7 +65,7 @@ async def _send_app(message: Message, config: BotConfig, path: str = "") -> None
     if message.chat.type != ChatType.PRIVATE:
         await message.answer("Please open the Mini App in a private chat with this bot.")
         return
-    if not url.startswith("https://"):
+    if not is_telegram_web_app_url(url):
         await message.answer(
             f"The Mini App is available locally at {url}. Telegram Web App buttons require HTTPS."
         )

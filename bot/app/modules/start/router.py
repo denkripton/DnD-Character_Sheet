@@ -37,7 +37,7 @@ async def handle_start(
 
     await message.answer(
         start_service.create_greeting(user),
-        reply_markup=main_menu_keyboard(),
+        reply_markup=main_menu_keyboard(config),
     )
 
 
@@ -47,7 +47,16 @@ async def handle_menu_create(message: Message, state, creation_service) -> None:
     await handle_create(message, state, creation_service)
 
 
-async def handle_menu_characters(message: Message, state, management_service) -> None:
+async def handle_menu_characters(
+    message: Message, state, management_service, config: BotConfig
+) -> None:
+    from app.modules.start.mini_app import is_telegram_web_app_url
+
+    if is_telegram_web_app_url(config.MINI_APP_URL):
+        from app.modules.start.mini_app import handle_characters
+
+        await handle_characters(message, config)
+        return
     from app.modules.character.management import handle_my_characters
 
     await handle_my_characters(message, state, management_service)

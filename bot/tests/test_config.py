@@ -59,3 +59,20 @@ def test_mini_app_url_requires_https_in_production(monkeypatch):
             ENVIRONMENT="production",
             MINI_APP_URL="http://app.example.com",
         )
+
+
+def test_mini_app_url_is_trimmed(monkeypatch):
+    monkeypatch.setenv("BOT_TOKEN", "12345:test-token")
+    config = BotConfig(
+        BOT_TOKEN="12345:test-token", MINI_APP_URL=" https://app.example.com/ "
+    )
+
+    assert config.MINI_APP_URL == "https://app.example.com/"
+
+
+def test_mini_app_url_rejects_relative_url():
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        BotConfig(BOT_TOKEN="12345:test-token", MINI_APP_URL="/mini-app")
