@@ -1,22 +1,11 @@
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from src.modules.health.dependencies import get_health_service
-from src.modules.health.schemas import LivenessResponseSchema, ReadinessResponseSchema
+from src.modules.health.schemas import ReadinessResponseSchema
 from src.modules.health.service import HealthService
 from src.utils import ErrorHandlingRoute
 
-router = APIRouter(prefix="/health", route_class=ErrorHandlingRoute)
-
-
-@router.get(
-    "/live",
-    summary="Liveness probe",
-    tags=["Health"],
-    description="Reports whether the application process is alive without touching external dependencies.",
-    response_model=LivenessResponseSchema,
-)
-async def liveness() -> LivenessResponseSchema:
-    return LivenessResponseSchema(status="alive")
+router = APIRouter(route_class=ErrorHandlingRoute)
 
 
 @router.get(

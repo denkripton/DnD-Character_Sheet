@@ -1,0 +1,2 @@
+UP = "up"
+DOWN = "down"

@@ -1,13 +1,5 @@
-from src.modules.auth.models import ExternalIdentity, User
+from src.modules.auth.models import ExternalIdentity
 from src.repositories.sql_alchemy import SQLAlchemyRepository
-
-
-class UserRepository(SQLAlchemyRepository):
-    model = User
-
-    async def get_by_email(self, email: str):
-        user = await self.get_one(email=email)
-        return user
 
 
 class ExternalIdentityRepository(SQLAlchemyRepository):
