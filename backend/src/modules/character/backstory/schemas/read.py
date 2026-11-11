@@ -2,11 +2,16 @@ import uuid
 
 from pydantic import Field
 
+from src.modules.character.backstory.schemas.create import BackstoryCreateSchema
 from src.utils.schemas.base_schema import BaseSchema
 
-
-class BackstoryCreateSchema(BaseSchema):
-    backstory: str = Field(..., min_length=1, max_length=10000)
+__all__ = [
+    "BackstoryCreateSchema",
+    "BackstoryReadSchema",
+    "BaseSchema",
+    "Field",
+    "uuid",
+]
 
 
 class BackstoryReadSchema(BaseSchema):
