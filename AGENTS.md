@@ -113,6 +113,43 @@ Do not move domain logic into unrelated modules simply because it is convenient.
 
 ---
 
+# Backend Python Module Organization
+
+These conventions apply to structural organization and refactoring of Python implementation modules under `backend/src/`. They supplement the existing backend architecture and dependency rules.
+
+## Module and Class Boundaries
+
+* Place each implementation class in its own Python file. This includes abstract classes, Pydantic models, ORM models, dataclasses, enums, and protocols.
+* Place each enum in its own file, even when it is the only implementation in that file.
+* Give each independent standalone function its own module. Keep tightly related functions together only when they are methods on a class with a genuine shared responsibility.
+* Group functions into a class only when cohesion, the Single Responsibility Principle (SRP), and SOLID principles justify the class. Do not create artificial classes solely to avoid standalone functions.
+* Preserve existing function signatures and public interfaces during structural refactoring. Do not convert a function into a method if that changes its interface, dependencies, or behavior.
+
+## Responsibility and Utility Placement
+
+* Organize implementation files into responsibility-based directories such as `services/`, `repositories/`, `enums/`, and `utils/`. Keep a meaningful architectural directory even when it contains only one implementation file.
+* Place shared utilities at their lowest common architectural scope: within a feature when shared only by that feature, within a domain when shared across its features, and in `src/utils/` only when shared across top-level domains.
+* Reuse across two or more independent modules is a reason to consider shared placement, but does not make domain services, repositories, workflows, or business logic utilities. Keep domain logic in its proper domain/application layer.
+* Avoid catch-all utility modules. Keep functionality close to its owning component unless it is genuinely shared at a wider scope.
+* Keep business logic separate from infrastructure, presentation, persistence, and transport code, consistent with the dependency direction and boundaries documented in this file.
+
+## Imports and Package Initialization
+
+* Do not introduce modules whose only purpose is to import or re-export symbols. Package `__init__.py` files are the exception and may provide explicit package exports.
+* A package `__init__.py` must contain only import statements and an explicit `__all__` definition. It must not contain class or function implementations, dynamic imports, runtime registration, side-effectful initialization, or other executable statements.
+* Preserve existing public import contracts where possible when moving or splitting modules. Update consumers as needed without renaming public symbols.
+* Avoid circular dependencies. Keep dependencies aligned with the existing module and architectural boundaries.
+
+## Structural Refactoring Constraints
+
+* Structural refactoring must not change application behavior, business logic, D&D rules, calculations, validation, persistence or transaction behavior, API routes/contracts, or messaging contracts.
+* Do not modify tests during structural refactoring. Run relevant existing tests and preserve compatibility with their imports; if a structural change conflicts with unchanged tests, leave that change unimplemented and report the conflict.
+* Use Ruff for structural and import audits. Do not apply broad automatic formatting or lint fixes as part of a structural refactor; address only issues introduced by that refactor.
+* Keep each task within its explicitly defined atomic change boundary. Do not combine unrelated refactoring work.
+* Never create Git commits automatically. Report a proposed commit message instead.
+
+---
+
 # Domain Rules
 
 The domain is the source of truth for D&D character rules.
