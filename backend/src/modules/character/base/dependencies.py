@@ -1,11 +1,9 @@
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
-
 from fastapi import Depends
-
+from src.databases.unit_of_work import UnitOfWork
 from src.dependencies import get_rate_limiter, get_unit_of_work
-from src.modules.auth.repository import UserRepository
 from src.modules.auth.dependencies import user_repository
+from src.modules.auth.repository import UserRepository
+from src.modules.character.base.scopes import character_service_scope
 from src.modules.character.base.service import CharacterService
 from src.modules.character.dependencies import (
     character_ownership_guard,
@@ -13,16 +11,15 @@ from src.modules.character.dependencies import (
     combat_repository,
     stats_repository,
 )
-from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.modules.character.repositories import (
     CharacterRepository,
     CombatRepository,
     StatsRepository,
 )
+from src.modules.character.utils.ownership import CharacterOwnershipGuard
 from src.utils.interfaces.rate_limiter import RateLimiter
-from src.databases.unit_of_work import UnitOfWork
-from src.databases.sql import AsyncSessionLocal
 
+__all__ = ["character_service_scope", "get_character_service"]
 
 def get_character_service(
     character_repo: CharacterRepository = Depends(character_repository),
@@ -42,23 +39,3 @@ def get_character_service(
         unit_of_work=uow,
         rate_limiter=rate_limiter,
     )
-
-
-@asynccontextmanager
-async def character_service_scope() -> AsyncIterator[CharacterService]:
-    async with AsyncSessionLocal() as session:
-        try:
-            characters = CharacterRepository(session)
-            users = UserRepository(session)
-            yield CharacterService(
-                character_repository=characters,
-                user_repository=users,
-                ownership_guard=CharacterOwnershipGuard(characters, users),
-                combat_repository=CombatRepository(session),
-                stats_repository=StatsRepository(session),
-                unit_of_work=UnitOfWork(session),
-                rate_limiter=get_rate_limiter(),
-            )
-        except Exception:
-            await session.rollback()
-            raise

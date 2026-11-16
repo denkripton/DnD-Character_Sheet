@@ -12,6 +12,16 @@ from src.modules.character.base.schemas import (
     CharacterReadSchema,
     CharacterUpdateSchema,
 )
+from src.modules.character.draft.constants import PARAMETER_LABELS
+from src.modules.character.draft.fields import CHARACTER_DRAFT_FIELDS, STAT_FIELDS
+from src.modules.character.draft.helpers import (
+    _draft_stats_values,
+    _generate_stats_values,
+    _parse_stats_values,
+    _stats_error_message,
+    friendly_validation_message,
+    parameter_label,
+)
 from src.modules.character.draft.schemas import CharacterDraftReadSchema
 from src.modules.character.models import CharacterDraft
 from src.modules.character.repositories import (
@@ -35,111 +45,19 @@ from src.modules.character.utils.random_character import generate_random_charact
 from src.utils.exceptions import RateLimitExceeded, ServiceError
 from src.utils.interfaces.rate_limiter import RateLimiter
 
-PARAMETER_LABELS = {
-    "name": "Name",
-    "kind": "Race",
-    "spec_class": "Class",
-    "alignment": "Alignment",
-    "background": "Background",
-    "level": "Level",
-    "experience_points": "Experience points",
-}
-
 FULL_GENERATION_METHODS = ("random", "standard", "point_buy")
 logger = structlog.get_logger(__name__)
 
 DAILY_LIMIT_COUNTED_OPERATIONS = frozenset({"generate_character", "save_character"})
 
-CHARACTER_DRAFT_FIELDS = (
-    "name",
-    "kind",
-    "spec_class",
-    "alignment",
-    "background",
-    "level",
-    "experience_points",
-)
-
-STAT_FIELDS = (
-    "strength",
-    "dexterity",
-    "constitution",
-    "intelligence",
-    "wisdom",
-    "charisma",
-)
-
-
-def parameter_label(parameter: str) -> str:
-    return PARAMETER_LABELS.get(parameter, parameter)
-
-
-def friendly_validation_message(exc: ValidationError) -> str:
-    error = exc.errors()[0]
-    location = error.get("loc") or ()
-    field = str(location[0]) if location else ""
-    label = parameter_label(field)
-    error_type = error.get("type")
-    if error_type == "string_too_long":
-        max_length = error.get("ctx", {}).get("max_length")
-        return f"{label} must be no more than {max_length} characters."
-    if error_type == "extra_forbidden":
-        return f"Unsupported parameter: {field}."
-    if error_type == "string_type":
-        return f"{label} must be a text value."
-    if error_type == "missing":
-        return f"{label} is required."
-    return f"{label}: {error.get('msg', 'is invalid')}."
-
-
-def _parse_stats_values(values) -> dict:
-    if not isinstance(values, (list, tuple)) or len(values) != 6:
-        raise ServiceError(
-            msg="Enter exactly six values in order: STR DEX CON INT WIS CHA.",
-            code=422,
-        )
-    parsed = []
-    for value in values:
-        try:
-            parsed.append(int(str(value).strip()))
-        except (TypeError, ValueError) as exc:
-            raise ServiceError(msg="Stats must be whole numbers.", code=422) from exc
-    return assign_stats(parsed)
-
-
-def _stats_error_message(exc: ValidationError) -> str:
-    error = exc.errors()[0]
-    error_type = error.get("type")
-    if error_type in ("greater_than_equal", "less_than_equal"):
-        return "Each stat must be between 8 and 15."
-    if error_type == "value_error":
-        message = str(error.get("msg", ""))
-        message = message.removeprefix("Value error, ")
-        return message
-    if error_type == "int_type":
-        return "Stats must be whole numbers."
-    if error_type == "missing":
-        return "All six stats are required."
-    return str(error.get("msg", "Stats are invalid."))
-
-
-def _draft_stats_values(stats) -> dict:
-    if not isinstance(stats, dict):
-        raise ServiceError(msg="Ability scores are invalid.", code=422)
-    values = {}
-    for field in STAT_FIELDS:
-        value = stats.get(field)
-        if (
-            isinstance(value, bool)
-            or not isinstance(value, int)
-            or not 3 <= value <= 20
-        ):
-            raise ServiceError(
-                msg="Ability scores must be whole numbers between 3 and 20.",
-                code=422,
-            )
-        values[field] = value
-    return values
+__all__ = [
+    "PARAMETER_LABELS",
+    "CharacterDraftService",
+    "assign_stats",
+    "generate_point_buy_stats",
+    "generate_random_stats",
+    "generate_standard_array",
+]
 
 
 class CharacterDraftService:
@@ -460,17 +378,3 @@ class CharacterDraftService:
         draft.data = {**(draft.data or {}), "stats": stats_dict}
         await self.uow.commit()
         await self.uow.refresh(draft)
-
-
-def _generate_stats_values(method: str) -> dict:
-    if method == "standard":
-        generated = generate_standard_array()
-    elif method == "point_buy":
-        generated = generate_point_buy_stats()
-    elif method == "random":
-        generated = generate_random_stats()
-    else:
-        raise ServiceError(
-            msg=f"Unsupported stats generation method: {method}.", code=422
-        )
-    return assign_stats(generated)

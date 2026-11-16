@@ -1,126 +1,41 @@
-from fastapi import APIRouter, Depends, Query
-
-from src.modules.auth import get_current_user
+from fastapi import APIRouter
 from src.modules.auth.schemas.exceptions.user_401 import User401
 from src.modules.auth.schemas.exceptions.user_422 import User422
-from src.modules.character.skills.schemas import SkillCreateSchema, SkillReadSchema
-from src.modules.character.skills.dependencies import get_skill_service
-from src.modules.character.skills.service import SkillService
+from src.modules.character.skills.handlers import (
+    add_skill,
+    delete_skill,
+    generate_skills,
+    get_skills,
+    update_skill,
+)
+from src.modules.character.skills.handlers.add_skill import router as add_router
+from src.modules.character.skills.handlers.delete_skill import router as delete_router
+from src.modules.character.skills.handlers.generate_skills import (
+    router as generate_router,
+)
+from src.modules.character.skills.handlers.update_skill import router as update_router
+from src.modules.character.skills.schemas import SkillReadSchema
 from src.utils import ErrorHandlingRoute
 
 router = APIRouter(prefix="/chatacters/{character_id}/skills", route_class=ErrorHandlingRoute)
-
-
-@router.get(
+router.get(
     "",
     summary="Get all skills (Protected)",
     tags=["Skills CRUD's"],
     description="Get all skills of one of your characters",
     response_model=list[SkillReadSchema],
-    responses={
-        401: {"model": User401},
-        422: {"model": User422},
-    },
-)
-async def get_skills(
-    character_id: str,
-    user_id: str = Depends(get_current_user),
-    service: SkillService = Depends(get_skill_service),
-):
-    return await service.get_skills(user_id=user_id, character_id=character_id)
+    responses={401: {"model": User401}, 422: {"model": User422}},
+)(get_skills)
+router.include_router(add_router)
+router.include_router(generate_router)
+router.include_router(update_router)
+router.include_router(delete_router)
 
-
-@router.post(
-    "/create",
-    summary="Add a skill (Protected)",
-    tags=["Skills CRUD's"],
-    description="Add a skill to your character",
-    response_model=SkillReadSchema,
-    responses={
-        401: {"model": User401},
-        422: {"model": User422},
-    },
-)
-async def add_skill(
-    character_id: str,
-    data: SkillCreateSchema,
-    user_id: str = Depends(get_current_user),
-    service: SkillService = Depends(get_skill_service),
-):
-    return await service.add_skill(
-        user_id=user_id, character_id=character_id, data=data
-    )
-
-
-@router.post(
-    "/generate",
-    summary="Generate random skills (Protected)",
-    tags=["Skills CRUD's"],
-    description=(
-        "Add a random set of skills (2-4 by default) to a character. "
-        "Already known skills are skipped."
-    ),
-    response_model=list[SkillReadSchema],
-    responses={
-        401: {"model": User401},
-        422: {"model": User422},
-    },
-)
-async def generate_skills(
-    character_id: str,
-    count: int | None = Query(
-        default=None,
-        ge=1,
-        le=18,
-        description="How many skills to generate (default: random 2-4)",
-    ),
-    user_id: str = Depends(get_current_user),
-    service: SkillService = Depends(get_skill_service),
-):
-    return await service.generate_skills(
-        user_id=user_id, character_id=character_id, count=count
-    )
-
-
-@router.put(
-    "/{skill_id}",
-    summary="Update a skill (Protected)",
-    tags=["Skills CRUD's"],
-    description="Update one of the character's skills",
-    response_model=SkillReadSchema,
-    responses={
-        401: {"model": User401},
-        422: {"model": User422},
-    },
-)
-async def update_skill(
-    character_id: str,
-    skill_id: str,
-    data: SkillCreateSchema,
-    user_id: str = Depends(get_current_user),
-    service: SkillService = Depends(get_skill_service),
-):
-    return await service.update_skill(
-        user_id=user_id, character_id=character_id, skill_id=skill_id, data=data
-    )
-
-
-@router.delete(
-    "/{skill_id}",
-    summary="Delete a skill (Protected)",
-    tags=["Skills CRUD's"],
-    description="Delete one of the character's skills",
-    responses={
-        401: {"model": User401},
-        422: {"model": User422},
-    },
-)
-async def delete_skill(
-    character_id: str,
-    skill_id: str,
-    user_id: str = Depends(get_current_user),
-    service: SkillService = Depends(get_skill_service),
-):
-    return await service.delete_skill(
-        user_id=user_id, character_id=character_id, skill_id=skill_id
-    )
+__all__ = [
+    "add_skill",
+    "delete_skill",
+    "generate_skills",
+    "get_skills",
+    "router",
+    "update_skill",
+]
