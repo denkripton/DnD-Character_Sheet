@@ -1,16 +1,9 @@
 from typing import Any
-from uuid import UUID
 
 from src.modules.auth.repository import UserRepository
 from src.modules.character.repositories import CharacterRepository
+from src.modules.character.utils.ownership.coerce_identifier import coerce_identifier
 from src.utils.exceptions import ServiceError
-
-
-def coerce_identifier(value):
-    try:
-        return UUID(str(value))
-    except (TypeError, ValueError):
-        return value
 
 
 class CharacterOwnershipGuard:
