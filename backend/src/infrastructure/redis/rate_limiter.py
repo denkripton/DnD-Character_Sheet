@@ -5,7 +5,8 @@ from collections.abc import Callable
 import structlog
 from redis.asyncio import Redis
 
-from src.utils.interfaces.rate_limiter import RateLimiter, RateLimitResult
+from src.utils.interfaces.rate_limit_result import RateLimitResult
+from src.utils.interfaces.rate_limiter import RateLimiter
 
 
 class RedisRateLimiter(RateLimiter):

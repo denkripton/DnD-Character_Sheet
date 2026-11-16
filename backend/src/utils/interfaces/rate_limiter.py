@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from src.infrastructure.redis.enums import RateLimitResult
+from src.utils.interfaces.rate_limit_result import RateLimitResult
 
 
 class RateLimiter(ABC):
