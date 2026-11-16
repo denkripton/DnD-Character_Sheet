@@ -1,5 +1,4 @@
 from pydantic import Field
-
 from src.modules.character.skills.enums import SkillAbility
 from src.utils.schemas.base_schema import BaseSchema
 

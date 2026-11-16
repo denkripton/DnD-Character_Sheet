@@ -6,7 +6,7 @@ from src.infrastructure.rabbitmq.bus import RabbitMQMessageBus
 from src.modules.health.checks.check_postgres import check_postgres
 from src.modules.health.checks.check_rabbitmq import check_rabbitmq
 from src.modules.health.checks.check_redis import check_redis
-from src.modules.health.checks.status import DOWN, UP
+from src.modules.health.checks.status import UP
 from src.modules.health.schemas import ReadinessResponseSchema
 
 

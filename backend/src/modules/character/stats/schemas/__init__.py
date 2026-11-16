@@ -7,9 +7,9 @@ from src.modules.character.stats.schemas.read_modifiers import ModifiersReadSche
 from src.modules.character.stats.schemas.response import StatsResponseSchema
 
 __all__ = [
-    "StatsCreateSchema",
     "BackgroundIncreaseSchema",
-    "StatsReadSchema",
     "ModifiersReadSchema",
+    "StatsCreateSchema",
+    "StatsReadSchema",
     "StatsResponseSchema",
 ]
